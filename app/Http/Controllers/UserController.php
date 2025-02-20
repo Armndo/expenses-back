@@ -2,11 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash;
 use Laravel\Passport\Token;
 
 class UserController extends Controller
@@ -22,7 +20,7 @@ class UserController extends Controller
 
         $createdToken = $user->createToken("Access Token");
         $token = $createdToken->token;
-        $token->expires_at = Carbon::now()->addHour();
+        $token->expires_at = Carbon::now()->addSeconds(3);
         $token->save();
 
         return [
