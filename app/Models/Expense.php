@@ -18,6 +18,13 @@ class Expense extends Model
         "instalments",
     ];
 
+    protected $hidden = [
+        "created_at",
+        "updated_at",
+        "deleted_at",
+        "source_id",
+    ];
+
     public $timestamps = true;
 
     public function source() {
