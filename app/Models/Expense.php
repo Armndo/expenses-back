@@ -25,6 +25,10 @@ class Expense extends Model
         "source_id",
     ];
 
+    protected $casts = [
+        "amount" => "float",
+    ];
+
     public $timestamps = true;
 
     public function source() {
