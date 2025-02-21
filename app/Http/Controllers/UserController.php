@@ -16,7 +16,7 @@ class UserController extends Controller
         }
 
         $user = $request->user();
-        Token::where("user_id", $user->id)->update(["revoked" => true]);
+        # Token::where("user_id", $user->id)->update(["revoked" => true]); # TODO reimplement
 
         $createdToken = $user->createToken("Access Token");
         $token = $createdToken->token;
