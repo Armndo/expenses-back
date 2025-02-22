@@ -21,8 +21,9 @@ class ExpenseController extends Controller
         $expenses = $user->sources()->with(["expenses" => fn(Builder $query) =>
             $query->whereBetween("date", [$start, $end])
             ->whereNull("instalments")
+            ->orderBy("id")
             ->orderBy("date")
-        ])->get()->toArray();
+        ])->orderBy("sources.id")->get()->toArray();
 
         return $expenses;
     }

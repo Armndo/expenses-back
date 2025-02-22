@@ -16,7 +16,7 @@ class UserController extends Controller
         }
 
         $user = $request->user();
-        # Token::where("user_id", $user->id)->update(["revoked" => true]); # TODO reimplement
+        // Token::where("user_id", $user->id)->update(["revoked" => true]); // TODO reimplement
 
         $createdToken = $user->createToken("Access Token");
         $token = $createdToken->token;
@@ -28,7 +28,14 @@ class UserController extends Controller
         ];
     }
 
-    public function info(Request $request) {
-        return Auth::user();
+    public function logout() {
+        $user = Auth::user();
+        Token::where("user_id", $user->id)->update(["revoked" => true]);
+
+        return "ok";
+    }
+
+    public function info() {
+        return "ok";
     }
 }
