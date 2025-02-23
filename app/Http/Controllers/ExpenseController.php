@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Expense;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Contracts\Database\Eloquent\Builder;
@@ -23,7 +24,7 @@ class ExpenseController extends Controller
             ->whereNull("instalments")
             ->orderBy("id")
             ->orderBy("date")
-        ])->orderBy("sources.id")->get()->toArray();
+        ])->withCount("expenses")->orderBy("sources.id")->get()->toArray();
 
         return $expenses;
     }
@@ -69,17 +70,17 @@ class ExpenseController extends Controller
         return $expense;
     }
 
-    public function destroy(Request $request, $expense_id) {
+    public function destroy($expense_id) {
         $user = Auth::user();
-        $source = $user->sources()->where("id", $request->source_id)->first();
+        $expense = Expense::find($expense_id);
 
-        if (!$source) {
+        if (!$expense) {
             return response()->json("error", 400);
         }
 
-        $expense = $source->expenses()->where("id", $expense_id)->first();
+        $source = $user->sources()->where("id", $expense->source_id)->first();
 
-        if (!$expense) {
+        if (!$source) {
             return response()->json("error", 400);
         }
 
