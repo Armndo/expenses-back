@@ -2,11 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash;
 use Laravel\Passport\Token;
 
 class UserController extends Controller
@@ -18,11 +16,11 @@ class UserController extends Controller
         }
 
         $user = $request->user();
-        Token::where("user_id", $user->id)->update(["revoked" => true]);
+        // Token::where("user_id", $user->id)->update(["revoked" => true]); // TODO reimplement
 
         $createdToken = $user->createToken("Access Token");
         $token = $createdToken->token;
-        $token->expires_at = Carbon::now()->addHour();
+        $token->expires_at = Carbon::now()->addSeconds(3);
         $token->save();
 
         return [
@@ -30,7 +28,14 @@ class UserController extends Controller
         ];
     }
 
-    public function info(Request $request) {
-        return Auth::user();
+    public function logout() {
+        $user = Auth::user();
+        Token::where("user_id", $user->id)->update(["revoked" => true]);
+
+        return "ok";
+    }
+
+    public function info() {
+        return "ok";
     }
 }

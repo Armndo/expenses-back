@@ -97,6 +97,21 @@ return [
             'sslmode' => 'prefer',
         ],
 
+        'pgsql_local' => [
+            'driver' => 'pgsql',
+            'url' => env('DB_URL_LOCAL'),
+            'host' => env('DB_HOST_LOCAL', '127.0.0.1'),
+            'port' => env('DB_PORT_LOCAL', '5432'),
+            'database' => env('DB_DATABASE_LOCAL', 'laravel'),
+            'username' => env('DB_USERNAME_LOCAL', 'root'),
+            'password' => env('DB_PASSWORD_LOCAL', ''),
+            'charset' => env('DB_CHARSET', 'utf8'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'search_path' => 'public',
+            'sslmode' => 'prefer',
+        ],
+
         'sqlsrv' => [
             'driver' => 'sqlsrv',
             'url' => env('DB_URL'),
