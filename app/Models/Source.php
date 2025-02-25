@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class Source extends Model
 {
+    protected $dateFormat = "Y-m-d H:i:sO";
+
     protected $fillable = [
         "name",
     ];
@@ -14,7 +16,6 @@ class Source extends Model
         "user_id",
         "created_at",
         "updated_at",
-        "deleted_at",
     ];
 
     public $timestamps = true;
