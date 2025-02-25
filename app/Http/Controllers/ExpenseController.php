@@ -19,12 +19,37 @@ class ExpenseController extends Controller
         $date->month += 1;
         $date->day -= 1;
         $end = $date->format("Y-m-d");
+        $tmp = [];
+
         $expenses = $user->sources()->with(["expenses" => fn(Builder $query) =>
             $query->whereBetween("date", [$start, $end])
             ->whereNull("instalments")
             ->orderBy("id")
             ->orderBy("date")
-        ])->withCount("expenses")->orderBy("sources.id")->get()->toArray();
+        ])->withCount(["expenses" => fn(Builder $query) =>
+            $query->whereNull("instalments")
+        ])->orderBy("sources.id")->get()->toArray();
+
+        $instalments = $user->sources()->with(["expenses" => fn(Builder $query) =>
+            $query->whereBetween("date", [$start, $end])
+            ->whereNotNull("instalments")
+            ->orderBy("id")
+            ->orderBy("date")
+        ])->withCount(["expenses" => fn(Builder $query) =>
+            $query->whereNotNull("instalments")
+        ])->orderBy("sources.id")->get()->toArray();
+
+        foreach ($expenses as $index => $source) {
+            $expenses[$index]["instalments_count"] = 0;
+            $expenses[$index]["instalments"] = [];
+            $tmp[$source["name"]] = $index;
+        }
+
+        foreach ($instalments as $source) {
+            $index = $tmp[$source["name"]];
+            $expenses[$index]["instalments"] = $source["expenses"];
+            $expenses[$index]["instalments_count"] = $source["expenses_count"];
+        }
 
         return $expenses;
     }
@@ -38,7 +63,7 @@ class ExpenseController extends Controller
         }
 
         try {
-            $expense = $source->expenses()->create($request->only("date", "amount", "description"));
+            $expense = $source->expenses()->create($request->only("date", "amount", "description", "instalments"));
         } catch (Exception $e) {
             return response()->json("error", 400);
         }
@@ -61,7 +86,7 @@ class ExpenseController extends Controller
         }
 
         try {
-            $expense->fill($request->only("date", "amount", "description"));
+            $expense->fill($request->only("date", "amount", "description", "instalments"));
             $expense->save();
         } catch (Exception $e) {
             return response()->json("error", 400);

@@ -12,8 +12,6 @@ class Expense extends Model
         "amount",
         "description",
         "date",
-        "is_monthly",
-        "monthly_amount",
         "instalments",
     ];
 
