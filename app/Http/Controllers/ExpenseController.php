@@ -13,7 +13,7 @@ class ExpenseController extends Controller
 {
     public function index(Request $request) {
         $user = Auth::user();
-        $date = Carbon::now();
+        $date = isset($request->date) ? new Carbon($request->date) : Carbon::now();
         $date->day = 1;
         $start = $date->format("Y-m-d");
         $date->month += 1;
