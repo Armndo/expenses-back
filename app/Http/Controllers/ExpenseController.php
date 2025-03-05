@@ -24,8 +24,8 @@ class ExpenseController extends Controller
         $expenses = $user->sources()->with(["expenses" => fn(Builder $query) =>
             $query->whereBetween("date", [$start, $end])
             ->whereNull("instalments")
-            ->orderBy("id")
             ->orderBy("date")
+            ->orderBy("id")
         ])->withCount(["expenses" => fn(Builder $query) =>
             $query->whereNull("instalments")
             ->whereBetween("date", [$start, $end])
@@ -35,8 +35,8 @@ class ExpenseController extends Controller
             $query->whereRaw("date(\"date\" + interval '1 month' * (\"instalments\" - 1)) >= '$start'")
             ->whereRaw("\"date\" <= '$end'")
             ->whereNotNull("instalments")
-            ->orderBy("id")
             ->orderBy("date")
+            ->orderBy("id")
         ])->withCount(["expenses" => fn(Builder $query) =>
             $query->whereRaw("date(\"date\" + interval '1 month' * (\"instalments\" - 1)) >= '$start'")
             ->whereRaw("\"date\" <= '$end'")
