@@ -28,25 +28,29 @@ class ExpenseController extends Controller
             ->orderBy("date")
         ])->withCount(["expenses" => fn(Builder $query) =>
             $query->whereNull("instalments")
+            ->whereBetween("date", [$start, $end])
         ])->orderBy("sources.id")->get()->toArray();
 
         $instalments = $user->sources()->with(["expenses" => fn(Builder $query) =>
-            $query->whereBetween("date", [$start, $end])
+            $query->whereRaw("date(\"date\" + interval '1 month' * (\"instalments\" - 1)) >= '$start'")
+            ->whereRaw("'$end' <= date(\"date\" + interval '1 month' * (\"instalments\" - 1))")
             ->whereNotNull("instalments")
             ->orderBy("id")
             ->orderBy("date")
         ])->withCount(["expenses" => fn(Builder $query) =>
-            $query->whereNotNull("instalments")
+            $query->whereRaw("date(\"date\" + interval '1 month' * (\"instalments\" - 1)) >= '$start'")
+            ->whereRaw("'$end' <= date(\"date\" + interval '1 month' * (\"instalments\" - 1))")
+            ->whereNotNull("instalments")
         ])->orderBy("sources.id")->get()->toArray();
 
         foreach ($expenses as $index => $source) {
             $expenses[$index]["instalments_count"] = 0;
             $expenses[$index]["instalments"] = [];
-            $tmp[$source["name"]] = $index;
+            $tmp[$source["id"]] = $index;
         }
 
         foreach ($instalments as $source) {
-            $index = $tmp[$source["name"]];
+            $index = $tmp[$source["id"]];
             $expenses[$index]["instalments"] = $source["expenses"];
             $expenses[$index]["instalments_count"] = $source["expenses_count"];
         }
