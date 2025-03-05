@@ -33,13 +33,13 @@ class ExpenseController extends Controller
 
         $instalments = $user->sources()->with(["expenses" => fn(Builder $query) =>
             $query->whereRaw("date(\"date\" + interval '1 month' * (\"instalments\" - 1)) >= '$start'")
-            ->whereRaw("'$end' <= date(\"date\" + interval '1 month' * (\"instalments\" - 1))")
+            ->whereRaw("\"date\" <= '$end'")
             ->whereNotNull("instalments")
             ->orderBy("id")
             ->orderBy("date")
         ])->withCount(["expenses" => fn(Builder $query) =>
             $query->whereRaw("date(\"date\" + interval '1 month' * (\"instalments\" - 1)) >= '$start'")
-            ->whereRaw("'$end' <= date(\"date\" + interval '1 month' * (\"instalments\" - 1))")
+            ->whereRaw("\"date\" <= '$end'")
             ->whereNotNull("instalments")
         ])->orderBy("sources.id")->get()->toArray();
 
