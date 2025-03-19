@@ -24,7 +24,7 @@ class ExpenseController extends Controller
         $expenses = $user->sources()->with(["expenses" => fn(Builder $query,) =>
             $query->select("expenses.*")
             ->join("sources", "sources.id", "expenses.source_id")
-            ->whereRaw("date between date(date_trunc('month', '$start'::date)::date + coalesce(sources.cutoff, 1)) and date(date_trunc('month', '$start'::date)::date - 1 + coalesce(sources.cutoff, 1) + interval '1 month')")
+            ->whereRaw("date between date(date_trunc('month', '$start'::date)::date - 1 + coalesce(sources.cutoff, 1)) and date(date_trunc('month', '$start'::date)::date + interval '1 month') - 2 + coalesce(sources.cutoff, 1)")
             ->whereNull("instalments")
             ->orderBy("date")
             ->orderBy("expenses.id")
@@ -33,8 +33,8 @@ class ExpenseController extends Controller
         $instalments = $user->sources()->with(["expenses" => fn(Builder $query) =>
             $query->select("expenses.*")
             ->join("sources", "sources.id", "expenses.source_id")
-            ->whereRaw("date(\"date\" + interval '1 month' * (\"instalments\" - 1)) >= date(date_trunc('month', '$start'::date)::date + coalesce(sources.cutoff, 1))")
-            ->whereRaw("\"date\" <= date(date_trunc('month', '$start'::date)::date - 1 + coalesce(sources.cutoff, 1) + interval '1 month')")
+            ->whereRaw("date(\"date\" + interval '1 month' * (\"instalments\" - 1)) >= date(date_trunc('month', '$start'::date)::date - 1 + coalesce(sources.cutoff, 1))")
+            ->whereRaw("\"date\" <= date(date_trunc('month', '$start'::date)::date + interval '1 month') - 2 + coalesce(sources.cutoff, 1)")
             ->whereNotNull("instalments")
             ->orderBy("date")
             ->orderBy("id")
