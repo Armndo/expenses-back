@@ -6,19 +6,18 @@ use Illuminate\Database\Eloquent\Model;
 
 class Expense extends Model
 {
+    protected $dateFormat = "Y-m-d H:i:sO";
+
     protected $fillable = [
         "amount",
         "description",
         "date",
-        "is_monthly",
-        "monthly_amount",
         "instalments",
     ];
 
     protected $hidden = [
         "created_at",
         "updated_at",
-        "deleted_at",
         "source_id",
     ];
 

@@ -13,18 +13,59 @@ class ExpenseController extends Controller
 {
     public function index(Request $request) {
         $user = Auth::user();
-        $date = Carbon::now();
+        $date = isset($request->date) ? new Carbon($request->date) : Carbon::now();
         $date->day = 1;
         $start = $date->format("Y-m-d");
         $date->month += 1;
         $date->day -= 1;
         $end = $date->format("Y-m-d");
-        $expenses = $user->sources()->with(["expenses" => fn(Builder $query) =>
-            $query->whereBetween("date", [$start, $end])
+        $tmp = [];
+
+        $expenses = $user->sources()->with(["expenses" => fn(Builder $query,) =>
+            $query->select("expenses.*")
+            ->join("sources", "sources.id", "expenses.source_id")
+            ->whereRaw("date between date(date_trunc('month', '$start'::date)::date - 1 + coalesce(sources.cutoff, 1)) and date(date_trunc('month', '$start'::date)::date + interval '1 month') - 2 + coalesce(sources.cutoff, 1)")
             ->whereNull("instalments")
-            ->orderBy("id")
             ->orderBy("date")
-        ])->withCount("expenses")->orderBy("sources.id")->get()->toArray();
+            ->orderBy("expenses.id")
+        ])->orderBy("sources.id")->get()->toArray();
+
+        $instalments = $user->sources()->with(["expenses" => fn(Builder $query) =>
+            $query->select("expenses.*")
+            ->join("sources", "sources.id", "expenses.source_id")
+            ->whereRaw("date(\"date\" + interval '1 month' * (\"instalments\" - 1)) >= date(date_trunc('month', '$start'::date)::date - 1 + coalesce(sources.cutoff, 1))")
+            ->whereRaw("\"date\" <= date(date_trunc('month', '$start'::date)::date + interval '1 month') - 2 + coalesce(sources.cutoff, 1)")
+            ->whereNotNull("instalments")
+            ->orderBy("date")
+            ->orderBy("id")
+        ])->orderBy("sources.id")->get()->toArray();
+
+        foreach ($expenses as $index => $source) {
+            $expenses[$index]["expenses_count"] = sizeof($source["expenses"]);
+            $expenses[$index]["instalments_count"] = 0;
+            $expenses[$index]["instalments"] = [];
+            $tmp[$source["id"]] = $index;
+        }
+
+        foreach ($instalments as $source) {
+            $index = $tmp[$source["id"]];
+            $expenses[$index]["instalments"] = $source["expenses"];
+            $expenses[$index]["instalments_count"] = sizeof($source["expenses"]);
+        }
+
+        $incomes = $user->sources()->with(["incomes" => fn(Builder $query) =>
+            $query->whereBetween("date", [$start, $end])
+            ->orderBy("date")
+            ->orderBy("id")
+        ])->withCount(["incomes" => fn(Builder $query) =>
+            $query->whereBetween("date", [$start, $end])
+        ])->orderBy("sources.id")->get()->toArray();
+
+        foreach ($incomes as $source) {
+            $index = $tmp[$source["id"]];
+            $expenses[$index]["incomes"] = $source["incomes"];
+            $expenses[$index]["incomes_count"] = $source["incomes_count"];
+        }
 
         return $expenses;
     }
@@ -38,7 +79,7 @@ class ExpenseController extends Controller
         }
 
         try {
-            $expense = $source->expenses()->create($request->only("date", "amount", "description"));
+            $expense = $source->expenses()->create($request->only("date", "amount", "description", "instalments"));
         } catch (Exception $e) {
             return response()->json("error", 400);
         }
@@ -61,7 +102,7 @@ class ExpenseController extends Controller
         }
 
         try {
-            $expense->fill($request->only("date", "amount", "description"));
+            $expense->fill($request->only("date", "amount", "description", "instalments"));
             $expense->save();
         } catch (Exception $e) {
             return response()->json("error", 400);
