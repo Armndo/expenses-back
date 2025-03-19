@@ -55,6 +55,20 @@ class ExpenseController extends Controller
             $expenses[$index]["instalments_count"] = $source["expenses_count"];
         }
 
+        $incomes = $user->sources()->with(["incomes" => fn(Builder $query) =>
+            $query->whereBetween("date", [$start, $end])
+            ->orderBy("date")
+            ->orderBy("id")
+        ])->withCount(["incomes" => fn(Builder $query) =>
+            $query->whereBetween("date", [$start, $end])
+        ])->orderBy("sources.id")->get()->toArray();
+
+        foreach ($incomes as $source) {
+            $index = $tmp[$source["id"]];
+            $expenses[$index]["incomes"] = $source["incomes"];
+            $expenses[$index]["incomes_count"] = $source["incomes_count"];
+        }
+
         return $expenses;
     }
 
