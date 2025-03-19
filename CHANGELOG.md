@@ -1,3 +1,23 @@
+## 0.2.0 (2025-03-19)
+
+### Feat
+
+- **expensecontroller**: coalescing cutoff date in query
+- **expensecontroller**: implemented cutoff date in query
+- implementing incomes
+- **expensecontroller**: implemented correct ordering of expenses
+- **expensecontroller**: implemented date from request for fetching expenses
+- implemented CORS for local and live env, removed prefix for api routes
+- **expensecontroller**: implemented instalment intervals
+- **expensecontroller**: implemented instalment expenses in index, store and update functions
+- implemented conventional commits with husky
+
+### Fix
+
+- **expensecontroller**: corrected query to match source's cutoff date
+- **expensecontroller**: corrected query for instalment expenses, now working as expected
+- added dateFormat in models in order to fix timestamp timezone insertion in database
+
 ## 0.1.0 (2025-02-24)
 
 ### Feat
