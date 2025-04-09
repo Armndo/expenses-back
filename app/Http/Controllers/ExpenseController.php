@@ -89,20 +89,20 @@ class ExpenseController extends Controller
 
     public function update(Request $request, $expense_id) {
         $user = Auth::user();
-        $source = $user->sources()->where("id", $request->source_id)->first();
-
-        if (!$source) {
-            return response()->json("error", 400);
-        }
-
-        $expense = $source->expenses()->where("id", $expense_id)->first();
+        $expense = Expense::find($expense_id);
 
         if (!$expense) {
             return response()->json("error", 400);
         }
 
+        $source = $user->sources()->where("id", $expense->source_id)->first();
+
+        if (!$source) {
+            return response()->json("error", 400);
+        }
+
         try {
-            $expense->fill($request->only("date", "amount", "description", "instalments"));
+            $expense->fill($request->only("date", "amount", "description", "instalments", "source_id"));
             $expense->save();
         } catch (Exception $e) {
             return response()->json("error", 400);

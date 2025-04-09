@@ -13,6 +13,7 @@ class Expense extends Model
         "description",
         "date",
         "instalments",
+        "source_id",
     ];
 
     protected $hidden = [
