@@ -21,7 +21,7 @@ class ExpenseController extends Controller
         $end = $date->format("Y-m-d");
         $tmp = [];
 
-        $expenses = $user->sources()->with(["expenses" => fn(Builder $query,) =>
+        $expenses = $user->sources()->with(["expenses" => fn(Builder $query) =>
             $query->select("expenses.*")
             ->join("sources", "sources.id", "expenses.source_id")
             ->whereRaw("date between date(date_trunc('month', '$start'::date)::date + coalesce(sources.cutoff, 0)) and date(date_trunc('month', '$start'::date)::date + interval '1 month') - 1 + coalesce(sources.cutoff, 0)")
