@@ -70,7 +70,7 @@ class ExpenseController extends Controller
 
         return [
             "expenses" => $expenses,
-            "categories" => Category::get(),
+            "categories" => Category::orderBy("order")->orderBy("name")->get(),
         ];
     }
 

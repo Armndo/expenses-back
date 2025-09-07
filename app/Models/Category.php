@@ -10,6 +10,8 @@ class Category extends Model
 
     protected $fillable = [
         "name",
+        "alias",
+        "order",
     ];
 
     protected $hidden = [
