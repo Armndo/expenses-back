@@ -19,7 +19,7 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => explode(",", env("FRONTEND_ORIGIN")),
+    'allowed_origins' => [env("FRONTEND_ORIGIN")],
 
     'allowed_origins_patterns' => [],
 

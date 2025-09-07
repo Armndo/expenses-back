@@ -10,7 +10,6 @@ class Source extends Model
 
     protected $fillable = [
         "name",
-        "cutoff",
     ];
 
     protected $hidden = [
@@ -18,6 +17,8 @@ class Source extends Model
         "created_at",
         "updated_at",
     ];
+
+    public $timestamps = true;
 
     public function user() {
         return $this->belongsTo(User::class);

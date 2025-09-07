@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Category;
 use App\Models\Expense;
 use Carbon\Carbon;
 use Exception;
@@ -22,10 +21,10 @@ class ExpenseController extends Controller
         $end = $date->format("Y-m-d");
         $tmp = [];
 
-        $expenses = $user->sources()->with(["expenses" => fn(Builder $query) =>
+        $expenses = $user->sources()->with(["expenses" => fn(Builder $query,) =>
             $query->select("expenses.*")
             ->join("sources", "sources.id", "expenses.source_id")
-            ->whereRaw("date between date(date_trunc('month', '$start'::date)::date + coalesce(sources.cutoff, 0)) and date(date_trunc('month', '$start'::date)::date + interval '1 month') - 1 + coalesce(sources.cutoff, 0)")
+            ->whereRaw("date between date(date_trunc('month', '$start'::date)::date - 1 + coalesce(sources.cutoff, 1)) and date(date_trunc('month', '$start'::date)::date + interval '1 month') - 2 + coalesce(sources.cutoff, 1)")
             ->whereNull("instalments")
             ->orderBy("date")
             ->orderBy("expenses.id")
@@ -34,8 +33,8 @@ class ExpenseController extends Controller
         $instalments = $user->sources()->with(["expenses" => fn(Builder $query) =>
             $query->select("expenses.*")
             ->join("sources", "sources.id", "expenses.source_id")
-            ->whereRaw("date(\"date\" + interval '1 month' * (\"instalments\" - 1)) >= date(date_trunc('month', '$start'::date)::date + coalesce(sources.cutoff, 0))")
-            ->whereRaw("\"date\" <= date(date_trunc('month', '$start'::date)::date + interval '1 month') - 1 + coalesce(sources.cutoff, 0)")
+            ->whereRaw("date(\"date\" + interval '1 month' * (\"instalments\" - 1)) >= date(date_trunc('month', '$start'::date)::date - 1 + coalesce(sources.cutoff, 1))")
+            ->whereRaw("\"date\" <= date(date_trunc('month', '$start'::date)::date + interval '1 month') - 2 + coalesce(sources.cutoff, 1)")
             ->whereNotNull("instalments")
             ->orderBy("date")
             ->orderBy("id")
@@ -68,10 +67,7 @@ class ExpenseController extends Controller
             $expenses[$index]["incomes_count"] = $source["incomes_count"];
         }
 
-        return [
-            "expenses" => $expenses,
-            "categories" => Category::orderBy("order")->orderBy("name")->get(),
-        ];
+        return $expenses;
     }
 
     public function store(Request $request) {
@@ -83,7 +79,7 @@ class ExpenseController extends Controller
         }
 
         try {
-            $expense = $source->expenses()->create($request->only("date", "amount", "description", "category_id", "instalments"));
+            $expense = $source->expenses()->create($request->only("date", "amount", "description", "instalments"));
         } catch (Exception $e) {
             return response()->json("error", 400);
         }
@@ -93,20 +89,20 @@ class ExpenseController extends Controller
 
     public function update(Request $request, $expense_id) {
         $user = Auth::user();
-        $expense = Expense::find($expense_id);
-
-        if (!$expense) {
-            return response()->json("error", 400);
-        }
-
-        $source = $user->sources()->where("id", $expense->source_id)->first();
+        $source = $user->sources()->where("id", $request->source_id)->first();
 
         if (!$source) {
             return response()->json("error", 400);
         }
 
+        $expense = $source->expenses()->where("id", $expense_id)->first();
+
+        if (!$expense) {
+            return response()->json("error", 400);
+        }
+
         try {
-            $expense->fill($request->only("date", "amount", "description", "instalments", "category_id", "source_id"));
+            $expense->fill($request->only("date", "amount", "description", "instalments"));
             $expense->save();
         } catch (Exception $e) {
             return response()->json("error", 400);
