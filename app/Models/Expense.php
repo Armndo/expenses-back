@@ -13,6 +13,7 @@ class Expense extends Model
         "description",
         "date",
         "instalments",
+        "category_id",
         "source_id",
     ];
 
@@ -30,5 +31,9 @@ class Expense extends Model
 
     public function source() {
         return $this->belongsTo(Source::class);
+    }
+
+    public function category() {
+        return $this->belongsTo(Category::class);
     }
 }

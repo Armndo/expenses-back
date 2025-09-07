@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Category;
 use App\Models\Expense;
 use Carbon\Carbon;
 use Exception;
@@ -21,7 +22,7 @@ class ExpenseController extends Controller
         $end = $date->format("Y-m-d");
         $tmp = [];
 
-        $expenses = $user->sources()->with(["expenses" => fn(Builder $query,) =>
+        $expenses = $user->sources()->with(["expenses" => fn(Builder $query) =>
             $query->select("expenses.*")
             ->join("sources", "sources.id", "expenses.source_id")
             ->whereRaw("date between date(date_trunc('month', '$start'::date)::date + coalesce(sources.cutoff, 0)) and date(date_trunc('month', '$start'::date)::date + interval '1 month') - 1 + coalesce(sources.cutoff, 0)")
@@ -67,7 +68,10 @@ class ExpenseController extends Controller
             $expenses[$index]["incomes_count"] = $source["incomes_count"];
         }
 
-        return $expenses;
+        return [
+            "expenses" => $expenses,
+            "categories" => Category::orderBy("order")->orderBy("name")->get(),
+        ];
     }
 
     public function store(Request $request) {
@@ -79,7 +83,7 @@ class ExpenseController extends Controller
         }
 
         try {
-            $expense = $source->expenses()->create($request->only("date", "amount", "description", "instalments"));
+            $expense = $source->expenses()->create($request->only("date", "amount", "description", "category_id", "instalments"));
         } catch (Exception $e) {
             return response()->json("error", 400);
         }
@@ -102,7 +106,7 @@ class ExpenseController extends Controller
         }
 
         try {
-            $expense->fill($request->only("date", "amount", "description", "instalments", "source_id"));
+            $expense->fill($request->only("date", "amount", "description", "instalments", "category_id", "source_id"));
             $expense->save();
         } catch (Exception $e) {
             return response()->json("error", 400);
