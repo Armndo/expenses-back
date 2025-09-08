@@ -80,6 +80,11 @@ class AppController extends Controller
 
     $categories = Category::orderBy("order")
     ->orderBy("name")
+    ->withCount([
+      "expenses" => fn(Builder $query) =>
+        $query->whereIn("expenses.source_id", $user->sources->pluck("id"))
+        ->whereBetween("date", [$start, $end])
+    ])
     ->get();
 
     return [
