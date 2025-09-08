@@ -83,7 +83,8 @@ class AppController extends Controller
     ->withCount([
       "expenses" => fn(Builder $query) =>
         $query->whereIn("expenses.source_id", $user->sources->pluck("id"))
-        ->whereBetween("date", [$start, $end])
+        ->join("sources", "sources.id", "expenses.source_id")
+        ->whereRaw("expenses.date between date(date_trunc('month', '$start'::date)::date + coalesce(sources.cutoff, 0)) and date(date_trunc('month', '$start'::date)::date + interval '1 month') - 1 + coalesce(sources.cutoff, 0)")
     ])
     ->get();
 
