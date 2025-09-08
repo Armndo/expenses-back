@@ -6,28 +6,28 @@ use Illuminate\Database\Eloquent\Model;
 
 class Source extends Model
 {
-    protected $dateFormat = "Y-m-d H:i:sO";
+  protected $dateFormat = "Y-m-d H:i:sO";
 
-    protected $fillable = [
-        "name",
-        "cutoff",
-    ];
+  protected $fillable = [
+    "name",
+    "cutoff",
+  ];
 
-    protected $hidden = [
-        "user_id",
-        "created_at",
-        "updated_at",
-    ];
+  protected $hidden = [
+    "user_id",
+    "created_at",
+    "updated_at",
+  ];
 
-    public function user() {
-        return $this->belongsTo(User::class);
-    }
+  public function user() {
+    return $this->belongsTo(User::class);
+  }
 
-    public function expenses() {
-        return $this->hasMany(Expense::class);
-    }
+  public function expenses() {
+    return $this->hasMany(Expense::class);
+  }
 
-    public function incomes() {
-        return $this->hasMany(Income::class);
-    }
+  public function incomes() {
+    return $this->hasMany(Income::class);
+  }
 }
