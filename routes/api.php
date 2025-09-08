@@ -13,7 +13,7 @@ Route::middleware("auth:api")->group(function() {
     Route::get("info", "info");
   });
 
-  Route::get("", AppController::class);
+  Route::get("data", AppController::class);
 
   Route::controller(ExpenseController::class)->group(function() {
     Route::post("expenses", "store");
