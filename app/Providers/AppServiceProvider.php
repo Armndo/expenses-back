@@ -21,6 +21,6 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        Passport::personalAccessTokensExpireIn(Carbon::now()->addHour());
+        Passport::personalAccessTokensExpireIn(Carbon::now()->addDay());
     }
 }
