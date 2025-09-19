@@ -13,6 +13,7 @@ class Category extends Model
     "name",
     "alias",
     "order",
+    "color",
   ];
 
   protected $hidden = [
