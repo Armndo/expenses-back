@@ -12,7 +12,8 @@ return new class extends Migration
   public function up(): void
   {
     Schema::table('expenses', function (Blueprint $table) {
-      $table->dropColumn("deleted_at");
+      $table->unsignedBigInteger("category_id")->nullable();
+      $table->foreign("category_id")->references("id")->on("categories")->onUpdate("cascade");
     });
   }
 
@@ -22,7 +23,8 @@ return new class extends Migration
   public function down(): void
   {
     Schema::table('expenses', function (Blueprint $table) {
-      $table->softDeletesTz("deleted_at", 2);
+      $table->dropForeign(["category_id"]);
+      $table->dropColumn("category_id");
     });
   }
 };

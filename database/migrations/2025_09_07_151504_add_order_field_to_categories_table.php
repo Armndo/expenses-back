@@ -11,8 +11,8 @@ return new class extends Migration
   */
   public function up(): void
   {
-    Schema::table('sources', function (Blueprint $table) {
-      $table->smallInteger("cutoff")->nullable();
+    Schema::table('categories', function (Blueprint $table) {
+      $table->unsignedTinyInteger("order")->nullable();
     });
   }
 
@@ -21,8 +21,8 @@ return new class extends Migration
   */
   public function down(): void
   {
-    Schema::table('sources', function (Blueprint $table) {
-      $table->dropColumn("cutoff");
+    Schema::table('categories', function (Blueprint $table) {
+      $table->dropColumn("order");
     });
   }
 };

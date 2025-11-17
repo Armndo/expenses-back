@@ -7,22 +7,22 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration
 {
   /**
-  * Run the migrations.
-  */
+   * Run the migrations.
+   */
   public function up(): void
   {
-    Schema::table('sources', function (Blueprint $table) {
-      $table->smallInteger("cutoff")->nullable();
+    Schema::table('categories', function (Blueprint $table) {
+      $table->text("color")->nullable();
     });
   }
 
   /**
-  * Reverse the migrations.
-  */
+   * Reverse the migrations.
+   */
   public function down(): void
   {
-    Schema::table('sources', function (Blueprint $table) {
-      $table->dropColumn("cutoff");
+    Schema::table('categories', function (Blueprint $table) {
+      $table->dropColumn("color");
     });
   }
 };

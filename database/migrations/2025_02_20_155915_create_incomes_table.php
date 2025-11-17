@@ -6,27 +6,27 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
-    public function up(): void
-    {
-        Schema::create('incomes', function (Blueprint $table) {
-            $table->id();
-            $table->float("amount")->default(0);
-            $table->date("date");
-            $table->timestampsTz(2);
-            $table->softDeletesTz("deleted_at", 2);
-            $table->unsignedBigInteger("source_id");
-            $table->foreign("source_id")->references("id")->on("sources")->onUpdate("cascade");
-        });
-    }
+  /**
+  * Run the migrations.
+  */
+  public function up(): void
+  {
+    Schema::create('incomes', function (Blueprint $table) {
+      $table->id();
+      $table->float("amount")->default(0);
+      $table->date("date");
+      $table->timestampsTz(2);
+      $table->softDeletesTz("deleted_at", 2);
+      $table->unsignedBigInteger("source_id");
+      $table->foreign("source_id")->references("id")->on("sources")->onUpdate("cascade");
+    });
+  }
 
-    /**
-     * Reverse the migrations.
-     */
-    public function down(): void
-    {
-        Schema::dropIfExists('incomes');
-    }
+  /**
+  * Reverse the migrations.
+  */
+  public function down(): void
+  {
+    Schema::dropIfExists('incomes');
+  }
 };

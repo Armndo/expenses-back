@@ -7,9 +7,9 @@ use Illuminate\Support\Facades\Auth;
 
 class SourceController extends Controller
 {
-    public function index() {
-        $user = Auth::user();
+  public function index() {
+    $user = Auth::user();
 
-        return $user->sources;
-    }
+    return $user->sources;
+  }
 }

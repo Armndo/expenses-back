@@ -3,31 +3,25 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class Source extends Model
+class Category extends Model
 {
   protected $dateFormat = "Y-m-d H:i:sO";
 
   protected $fillable = [
     "name",
-    "cutoff",
+    "alias",
+    "order",
+    "color",
   ];
 
   protected $hidden = [
-    "user_id",
     "created_at",
     "updated_at",
   ];
 
-  public function user() {
-    return $this->belongsTo(User::class);
-  }
-
-  public function expenses() {
+  public function expenses(): HasMany {
     return $this->hasMany(Expense::class);
-  }
-
-  public function incomes() {
-    return $this->hasMany(Income::class);
   }
 }

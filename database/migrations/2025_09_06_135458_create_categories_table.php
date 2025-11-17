@@ -11,8 +11,10 @@ return new class extends Migration
   */
   public function up(): void
   {
-    Schema::table('sources', function (Blueprint $table) {
-      $table->smallInteger("cutoff")->nullable();
+    Schema::create('categories', function (Blueprint $table) {
+      $table->id();
+      $table->text("name");
+      $table->timestampsTz(2);
     });
   }
 
@@ -21,8 +23,6 @@ return new class extends Migration
   */
   public function down(): void
   {
-    Schema::table('sources', function (Blueprint $table) {
-      $table->dropColumn("cutoff");
-    });
+    Schema::dropIfExists('categories');
   }
 };
