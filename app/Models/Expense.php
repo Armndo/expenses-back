@@ -12,6 +12,7 @@ class Expense extends Model
     "amount",
     "description",
     "date",
+    "next",
     "instalments",
     "category_id",
     "source_id",
@@ -25,6 +26,7 @@ class Expense extends Model
 
   protected $casts = [
     "amount" => "float",
+    "next" => "boolean",
   ];
 
   public $timestamps = true;

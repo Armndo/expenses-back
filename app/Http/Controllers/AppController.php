@@ -27,7 +27,11 @@ class AppController extends Controller
       "expenses" => fn(HasMany $query) =>
         $query->select("expenses.*")
         ->join("sources", "sources.id", "expenses.source_id")
-        ->whereRaw("date between date(date_trunc('month', '$start'::date)::date + coalesce(sources.cutoff, 0)) and date(date_trunc('month', '$start'::date)::date + interval '1 month') - 1 + coalesce(sources.cutoff, 0)")
+        ->whereRaw(<<<SQL
+          case "next" when true then date("date" + interval '1 month') else "date" end between
+            date(date_trunc('month', '$start'::date)::date + coalesce(sources.cutoff, 0)) and
+            date(date_trunc('month', '$start'::date)::date + interval '1 month') - 1 + coalesce(sources.cutoff, 0)
+        SQL)
         ->whereNull("instalments")
         ->orderBy("date")
         ->orderBy("expenses.id")
@@ -39,8 +43,10 @@ class AppController extends Controller
       "expenses" => fn(HasMany $query) =>
         $query->select("expenses.*")
         ->join("sources", "sources.id", "expenses.source_id")
-        ->whereRaw("date(\"date\" + interval '1 month' * (\"instalments\" - 1)) >= date(date_trunc('month', '$start'::date)::date + coalesce(sources.cutoff, 0))")
-        ->whereRaw("\"date\" <= date(date_trunc('month', '$start'::date)::date + interval '1 month') - 1 + coalesce(sources.cutoff, 0)")
+        ->whereRaw(<<<SQL
+          date(case "next" when true then date("date" + interval '1 month') else "date" end + interval '1 month' * (instalments - 1)) >= date(date_trunc('month', '$start'::date)::date + coalesce(sources.cutoff, 0)) and
+          case "next" when true then date("date" + interval '1 month') else "date" end <= date(date_trunc('month', '$start'::date)::date + interval '1 month') - 1 + coalesce(sources.cutoff, 0)
+        SQL)
         ->whereNotNull("instalments")
         ->orderBy("date")
         ->orderBy("id")
@@ -80,21 +86,49 @@ class AppController extends Controller
       $expenses[$index]["incomes_count"] = $source["incomes_count"];
     }
 
+    $source_ids = $user->sources->pluck("id");
+
     $categories = Category::orderBy("order")
     ->orderBy("name")
     ->withCount([
       "expenses" => fn(Builder $query) =>
-        $query->whereIn("expenses.source_id", $user->sources->pluck("id"))
+        $query->whereIn("expenses.source_id", $source_ids)
         ->join("sources", "sources.id", "expenses.source_id")
-        ->whereRaw("expenses.date between date(date_trunc('month', '$start'::date)::date + coalesce(sources.cutoff, 0)) and date(date_trunc('month', '$start'::date)::date + interval '1 month') - 1 + coalesce(sources.cutoff, 0)")
+        ->whereRaw(<<<SQL
+          case expenses.next when true then date(expenses.date + interval '1 month') else expenses.date end between
+            date(date_trunc('month', '$start'::date)::date + coalesce(sources.cutoff, 0)) and
+            date(date_trunc('month', '$start'::date)::date + interval '1 month') - 1 + coalesce(sources.cutoff, 0)
+        SQL)
+        ->whereNull("instalments")
     ])
     ->withSum([
       "expenses" => fn(Builder $query) =>
-        $query->whereIn("expenses.source_id", $user->sources->pluck("id"))
+        $query->whereIn("expenses.source_id", $source_ids)
         ->join("sources", "sources.id", "expenses.source_id")
-        ->whereRaw("expenses.date between date(date_trunc('month', '$start'::date)::date + coalesce(sources.cutoff, 0)) and date(date_trunc('month', '$start'::date)::date + interval '1 month') - 1 + coalesce(sources.cutoff, 0)")
+        ->whereRaw(<<<SQL
+          case expenses.next when true then date(expenses.date + interval '1 month') else expenses.date end between
+            date(date_trunc('month', '$start'::date)::date + coalesce(sources.cutoff, 0)) and
+            date(date_trunc('month', '$start'::date)::date + interval '1 month') - 1 + coalesce(sources.cutoff, 0)
+        SQL)
+        ->whereNull("instalments"),
     ], "amount")
+    ->with([
+      "expenses" => fn(HasMany $query) =>
+        $query->whereIn("expenses.source_id", $source_ids)
+        ->join("sources", "sources.id", "expenses.source_id")
+        ->whereRaw(<<<SQL
+          date(case expenses.next when true then date(expenses.date + interval '1 month') else expenses.date end + interval '1 month' * (expenses.instalments - 1)) >= date(date_trunc('month', '$start'::date)::date + coalesce(sources.cutoff, 0)) and
+          case expenses.next when true then date(expenses.date + interval '1 month') else expenses.date end <= date(date_trunc('month', '$start'::date)::date + interval '1 month') - 1 + coalesce(sources.cutoff, 0)
+        SQL)
+        ->whereNotNull("instalments")
+    ])
     ->get();
+
+    foreach ($categories as $category) {
+      $category->expenses_count += $category->expenses->count();
+      $category->expenses_sum_amount += $category->expenses->sum(fn($expense) => $expense->amount / $expense->instalments);
+      $category->makeHidden(["expenses"]);
+    }
 
     return [
       "expenses" => $expenses,

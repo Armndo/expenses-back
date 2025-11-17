@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Expense;
+use App\Models\User;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -10,7 +11,7 @@ use Illuminate\Support\Facades\Auth;
 class ExpenseController extends Controller
 {
   public function store(Request $request) {
-    $user = Auth::user();
+    $user = User::find(Auth::user()->id);
     $source = $user->sources()
     ->where("id", $request->source_id)
     ->first();
@@ -21,7 +22,7 @@ class ExpenseController extends Controller
 
     try {
       $expense = $source->expenses()
-      ->create($request->only("date", "amount", "description", "category_id", "instalments"));
+      ->create($request->only("date", "next", "amount", "description", "category_id", "instalments"));
     } catch (Exception $e) {
       return response()->json("error", 400);
     }
@@ -30,7 +31,7 @@ class ExpenseController extends Controller
   }
 
   public function update(Request $request, $expense_id) {
-    $user = Auth::user();
+    $user = User::find(Auth::user()->id);
     $expense = Expense::find($expense_id);
 
     if (!$expense) {
@@ -46,7 +47,7 @@ class ExpenseController extends Controller
     }
 
     try {
-      $expense->fill($request->only("date", "amount", "description", "instalments", "category_id", "source_id"));
+      $expense->fill($request->only("date", "next", "amount", "description", "instalments", "category_id", "source_id"));
       $expense->save();
     } catch (Exception $e) {
       return response()->json("error", 400);
@@ -56,7 +57,7 @@ class ExpenseController extends Controller
   }
 
   public function destroy($expense_id) {
-    $user = Auth::user();
+    $user = User::find(Auth::user()->id);
     $expense = Expense::find($expense_id);
 
     if (!$expense) {
