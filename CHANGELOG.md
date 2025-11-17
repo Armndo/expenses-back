@@ -1,3 +1,28 @@
+## 0.3.0 (2025-11-17)
+
+### BREAKING CHANGE
+
+- must rename the endpoint used in the client from GET /expenses to GET /
+
+### Feat
+
+- **appcontroller**: added sum of expenses to categories object
+- **category**: added color to model and created new migration for field
+- **appcontroller**: added same query to get expenses_count on the cutoff date too for categories
+- **appcontroller**: added count of expenses each month to categories
+- session token lifetime extended from 1 hour to 1 day :)
+- created AppController to move index functionality from ExpenseController
+- **category**: added alias and order field to categories table, added sort by
+- **expensescontroller**: added categories for index, store and update
+- added categories model and foreign key to expenses model
+- **cors**: added multiple FRONTEND_ORIGIN
+
+### Fix
+
+- changed empty endpoint to data to avoid CORS error
+- **expensecontroller**: corrected offset of cutoff date for expenses
+- **expensecontroller**: corrected not being able to change source of expense
+
 ## 0.2.0 (2025-03-19)
 
 ### Feat
