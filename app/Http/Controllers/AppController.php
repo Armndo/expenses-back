@@ -3,15 +3,16 @@
 namespace App\Http\Controllers;
 
 use App\Models\Category;
+use App\Models\User;
 use Carbon\Carbon;
-use Illuminate\Contracts\Database\Eloquent\Builder;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class AppController extends Controller
 {
   public function __invoke(Request $request) {
-    $user = Auth::user();
+    $user = User::find(Auth::user()->id);
     $date = isset($request->date) ? new Carbon($request->date) : Carbon::now();
     $date->day = 1;
     $start = $date->format("Y-m-d");
@@ -86,6 +87,12 @@ class AppController extends Controller
         ->join("sources", "sources.id", "expenses.source_id")
         ->whereRaw("expenses.date between date(date_trunc('month', '$start'::date)::date + coalesce(sources.cutoff, 0)) and date(date_trunc('month', '$start'::date)::date + interval '1 month') - 1 + coalesce(sources.cutoff, 0)")
     ])
+    ->withSum([
+      "expenses" => fn(Builder $query) =>
+        $query->whereIn("expenses.source_id", $user->sources->pluck("id"))
+        ->join("sources", "sources.id", "expenses.source_id")
+        ->whereRaw("expenses.date between date(date_trunc('month', '$start'::date)::date + coalesce(sources.cutoff, 0)) and date(date_trunc('month', '$start'::date)::date + interval '1 month') - 1 + coalesce(sources.cutoff, 0)")
+    ], "amount")
     ->get();
 
     return [
