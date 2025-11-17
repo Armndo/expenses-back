@@ -5,7 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Category;
 use App\Models\User;
 use Carbon\Carbon;
-use Illuminate\Database\Query\Builder;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -23,7 +24,7 @@ class AppController extends Controller
 
     $expenses = $user->sources()
     ->with([
-      "expenses" => fn(Builder $query) =>
+      "expenses" => fn(HasMany $query) =>
         $query->select("expenses.*")
         ->join("sources", "sources.id", "expenses.source_id")
         ->whereRaw("date between date(date_trunc('month', '$start'::date)::date + coalesce(sources.cutoff, 0)) and date(date_trunc('month', '$start'::date)::date + interval '1 month') - 1 + coalesce(sources.cutoff, 0)")
@@ -35,7 +36,7 @@ class AppController extends Controller
     ->toArray();
 
     $instalments = $user->sources()->with([
-      "expenses" => fn(Builder $query) =>
+      "expenses" => fn(HasMany $query) =>
         $query->select("expenses.*")
         ->join("sources", "sources.id", "expenses.source_id")
         ->whereRaw("date(\"date\" + interval '1 month' * (\"instalments\" - 1)) >= date(date_trunc('month', '$start'::date)::date + coalesce(sources.cutoff, 0))")
@@ -62,7 +63,7 @@ class AppController extends Controller
 
     $incomes = $user->sources()
     ->with([
-      "incomes" => fn(Builder $query) =>
+      "incomes" => fn(HasMany $query) =>
         $query->whereBetween("date", [$start, $end])
         ->orderBy("date")
         ->orderBy("id")
