@@ -73,7 +73,8 @@ class AppController extends Controller
     ->orderBy("name")
     ->with([
       "expenses" => fn(HasMany $query) =>
-        $query->whereIn("expenses.source_id", $source_ids)
+        $query->select("expenses.*")
+        ->whereIn("expenses.source_id", $source_ids)
         ->join("sources", "sources.id", "expenses.source_id")
         ->where(function ($q) use ($start) {
           $q->where(function ($q) use ($start) {

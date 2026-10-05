@@ -24,7 +24,7 @@ class UserController extends Controller
     }
 
     $device = $request->input("device");
-    $device = array_key_exists($device, self::DEVICES) ? $device : "web";
+    $device = is_string($device) && array_key_exists($device, self::DEVICES) ? $device : "web";
 
     $user = $request->user();
 

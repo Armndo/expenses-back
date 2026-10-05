@@ -49,6 +49,13 @@ it("gives android tokens ~90 days and web tokens ~1 day", function () {
   }
 });
 
+it("falls back to web when device is not a string", function () {
+  $response = $this->postJson("/login", ["email" => $this->user->email, "password" => "password", "device" => ["x"]]);
+
+  $response->assertOk();
+  expect(tokenRow($response->json("token"))->name)->toBe("web");
+});
+
 it("accepts the issued token on protected routes", function () {
   $jwt = loginAs($this, "android");
 
