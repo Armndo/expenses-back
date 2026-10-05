@@ -11,12 +11,18 @@ Laravel 11 REST API for personal expense tracking. PHP 8.2+, PostgreSQL, Laravel
 - **Dev server**: `composer run dev` (starts PHP server, queue, Pail logs, and Vite concurrently)
 - **Tests**: `./vendor/bin/pest`
 - **Single test**: `./vendor/bin/pest --filter="test name"` or `./vendor/bin/pest tests/Feature/ExampleTest.php`
+- **Tests hit a real DB**: `phpunit.xml` doesn't set one, so they use whatever `.env` points to (the remote dev DB). Run DB-touching tests against the local `expenses_test` database (needs migrations + `php artisan passport:client --personal` once):
+  `DB_CONNECTION=pgsql_local DB_DATABASE_LOCAL=expenses_test ./vendor/bin/pest`
+  `tests/Feature/AuthTokenTest.php` skips itself unless the DB is named `expenses_test`. Never run `RefreshDatabase` against `expenses` or the remote DB.
+- Routes have no `/api` prefix (`apiPrefix: "/"` in `bootstrap/app.php`), so tests call `/login`, `/data`, etc. `users` requires `username` and `lastname`, which `UserFactory` doesn't fill.
 - **Code formatting**: `./vendor/bin/pint`
 - **Migrations**: `php artisan migrate`
 
 ## Architecture
 
 API-only application — all routes defined in `routes/api.php`, no web UI logic.
+
+**Auth tokens**: `POST /login` takes an optional `device` (`android` → 90-day token, anything else → `web`, 1 day) and names the token after it. `POST /logout` revokes only the current token.
 
 **Routes** (`routes/api.php`): `POST /login` is public; everything else is under `auth:api` — `POST /logout`, `GET /info`, `GET /data`, and `POST|PUT|DELETE /expenses[/{expense_id}]`.
 
