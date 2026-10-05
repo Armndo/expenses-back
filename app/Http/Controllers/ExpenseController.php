@@ -46,6 +46,11 @@ class ExpenseController extends Controller
       return response()->json("error", 400);
     }
 
+    // Moving the expense: the target source must also belong to the user.
+    if ($request->has("source_id") && !$user->sources()->where("id", $request->source_id)->exists()) {
+      return response()->json("error", 400);
+    }
+
     try {
       $expense->fill($request->only("date", "next", "amount", "description", "instalments", "category_id", "source_id"));
       $expense->save();
