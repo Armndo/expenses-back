@@ -147,3 +147,21 @@ it("does not count transfers as spent or as income", function () {
 it("has no cash, debt or balance before the start month", function () {
   expect(balanceTotals($this, "2026-08-01"))->toBe(["cash" => null, "debt" => null, "total_money" => null]);
 });
+
+it("gives each source the position it had at the close of the previous month", function () {
+  Transfer::factory()->between($this->bank, $this->card)->on("2026-10-03")->create(["amount" => 100]);
+
+  $card = fn (string $month) => collect(balanceData($this, $month)["expenses"])->firstWhere("name", "card");
+
+  // October's previous balance is September's own balance (the card owed 300); October's transfer is not in it.
+  expect($card("2026-10-01")["previous_balance"])->toEqual($card("2026-09-01")["balance"])
+    ->and($card("2026-10-01")["previous_balance"])->toEqual(-300)
+    ->and($card("2026-10-01")["balance"])->toEqual(-200);
+});
+
+it("has no previous balance in the start month or before it", function () {
+  $card = fn (string $month) => collect(balanceData($this, $month)["expenses"])->firstWhere("name", "card");
+
+  expect($card("2026-09-01")["previous_balance"])->toBeNull()
+    ->and($card("2026-08-01")["previous_balance"])->toBeNull();
+});

@@ -57,8 +57,11 @@ class AppController extends Controller
 
     $summary = new Summary($user);
     $positions = $summary->positions($start);
+    // Position at the close of the previous month (null before the balance start): clients use it to tell
+    // whether a card carries debt from earlier periods.
+    $previous = $summary->positions(Carbon::parse($start)->subMonth()->format("Y-m-d"));
 
-    $expenses = $sources->map(function ($source) use ($positions) {
+    $expenses = $sources->map(function ($source) use ($positions, $previous) {
       [$instalments, $regular] = $source->expenses->partition(fn($e) => !is_null($e->instalments));
       $transfers = $source->outgoingTransfers->map(fn($t) => $this->transferItem($t, "out"))
         ->concat($source->incomingTransfers->map(fn($t) => $this->transferItem($t, "in")))
@@ -72,6 +75,7 @@ class AppController extends Controller
       $arr["transfers"] = $transfers->all();
       $arr["transfers_count"] = $transfers->count();
       $arr["balance"] = $positions[$source->id] ?? null;
+      $arr["previous_balance"] = $previous[$source->id] ?? null;
 
       return $arr;
     })->toArray();
