@@ -42,14 +42,15 @@ API-only application — all routes defined in `routes/api.php`, no web UI logic
 
 ### GET /data
 
-Response: `{ "expenses": [...sources], "categories": [...] }`.
+Response: `{ "expenses": [...sources], "categories": [...], "summary": {...} }`.
 
 - Each source in `expenses` includes its `incomes` (within the billing period), `incomes_count`, plus `expenses`/`expenses_count` (regular) and `instalments`/`instalments_count` (expenses with non-null `instalments`). Sources are loaded once and expenses are split with `->partition()` in PHP.
 - Each category carries `expenses_count` and `expenses_sum_amount`, computed in PHP from one eager-loaded expense set (instalments contribute `amount / instalments`); its `expenses` relation is hidden in the output.
+- `summary` is `{ spent, income, previous_spent, total_money }` for the month: `spent` (cash plus the monthly share of instalments) and `income` are the month's own, `previous_spent` is what the previous month spent, and `total_money` is the running balance: income from `config("expenses.balance_start")` (env `BALANCE_START`, default `2026-09-01`) up to this month, minus the spent of every month from the start up to the previous one (what is already paid). `null` before the start month. An income dated in the start month acts as the opening balance. Spent months are summed one by one because instalments spread over several. Tests in `tests/Feature/SummaryTest.php`.
 - **Billing period**: a month runs from `first of month + source.cutoff` days to `first of next month - 1 + cutoff`. Cutoff is per source (null behaves as 0, i.e. the calendar month), so the expense and income queries join `sources` (`$periodStart`/`$periodEnd` in `AppController` hold the income range). Incomes have no `next` or instalments.
 - **`next` flag**: when true, the expense's effective date is `date + 1 month` (billed in the next period). Every date filter must use that effective date, not `date`.
 - **Instalments**: an expense with `instalments = N` is active in each of N consecutive periods starting from its effective date.
-- The expense period filter exists twice (sources query with unqualified columns, categories query with `expenses.`-qualified columns). Keep both in sync when changing billing logic.
+- The expense period filter lives once, in `AppController::billedIn()` (qualified `expenses.` columns, query already joined with `sources`), and is shared by the sources query, the categories query and `spent()`. `period()` holds the cutoff range used by it and by the incomes queries.
 
 ## Conventions
 

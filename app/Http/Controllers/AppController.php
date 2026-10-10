@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Category;
+use App\Models\Expense;
+use App\Models\Income;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -77,6 +79,7 @@ class AppController extends Controller
     return [
       "expenses" => $expenses,
       "categories" => $categories,
+      "summary" => $this->summary($user, $start),
     ];
   }
 
@@ -110,5 +113,57 @@ class AppController extends Controller
         ->whereNotNull("expenses.instalments");
       });
     });
+  }
+
+  /** What the user spends in the period starting at `$start`: cash expenses plus the monthly share of instalments. */
+  private function spent(User $user, string $start): float {
+    $query = Expense::query()
+    ->join("sources", "sources.id", "expenses.source_id")
+    ->where("sources.user_id", $user->id);
+
+    return (float) $this->billedIn($query, $start)
+    ->selectRaw("coalesce(sum(case when expenses.instalments is null then expenses.amount else expenses.amount / expenses.instalments end), 0) as total")
+    ->value("total");
+  }
+
+  /** Incomes of the periods from the month starting at `$first` to the one starting at `$last`, both included. */
+  private function income(User $user, string $first, string $last): float {
+    return (float) Income::query()
+    ->join("sources", "sources.id", "incomes.source_id")
+    ->where("sources.user_id", $user->id)
+    ->whereRaw("incomes.date between {$this->period($first)[0]} and {$this->period($last)[1]}")
+    ->sum("incomes.amount");
+  }
+
+  /**
+   * Totals of the month starting at `$start`:
+   * - `spent`, `income`: the month's own (income by source cutoff, like expenses).
+   * - `previous_spent`: what the previous month spent, which is what gets paid this month.
+   * - `total_money`: running balance, the income from `expenses.balance_start` up to this month minus
+   *   the spent of every month from the start up to the previous one. `null` before the start month
+   *   (or absurdly far after it).
+   */
+  private function summary(User $user, string $start): array {
+    $month = Carbon::parse($start);
+    $balanceStart = Carbon::parse(config("expenses.balance_start"))->startOfMonth();
+
+    $summary = [
+      "spent" => $this->spent($user, $start),
+      "income" => $this->income($user, $start, $start),
+      "previous_spent" => $this->spent($user, $month->copy()->subMonth()->format("Y-m-d")),
+      "total_money" => null,
+    ];
+
+    if ($month->gte($balanceStart) && $balanceStart->diffInMonths($month) <= 120) {
+      $paid = 0.0;
+
+      for ($m = $balanceStart->copy(); $m->lt($month); $m->addMonth()) {
+        $paid += $this->spent($user, $m->format("Y-m-d"));
+      }
+
+      $summary["total_money"] = $this->income($user, $balanceStart->format("Y-m-d"), $start) - $paid;
+    }
+
+    return $summary;
   }
 }
