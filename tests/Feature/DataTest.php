@@ -5,6 +5,7 @@ use App\Models\Expense;
 use App\Models\Source;
 use App\Models\Transfer;
 use App\Models\User;
+use App\Services\Summary;
 use Carbon\Carbon;
 use Laravel\Passport\Passport;
 
@@ -187,7 +188,7 @@ describe("categories", function () {
       $category = collect($json["categories"])->firstWhere("id", $cat->id);
 
       expect($category["expenses_count"])->toBe($listed->count(), $month)
-        ->and($category["expenses_sum_amount"])->toEqualWithDelta($listed->sum(fn ($e) => round($e["amount"] / ($e["instalments"] ?? 1), 2)), 0.001, $month);
+        ->and($category["expenses_sum_amount"])->toEqualWithDelta($listed->sum(fn ($e) => $e["instalments"] ? Summary::share($e["amount"], $e["instalments"]) : $e["amount"]), 0.001, $month);
     }
   });
 });

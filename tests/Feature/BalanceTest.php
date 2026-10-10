@@ -54,6 +54,25 @@ it("leaves the card at exactly zero after paying what the bank bills for instalm
     ->and(balanceTotals($this, "2026-09-01")["debt"])->toEqual(0);
 });
 
+it("rounds an exact half cent the same in the balance and in the category sums", function () {
+  // 14405.58 / 12 = 1200.465 exactly: halves round away from zero, to 1200.47, everywhere.
+  $category = App\Models\Category::factory()->create();
+  Expense::factory()->for($this->card)->on("2026-09-20")->instalments(12)->create(["amount" => 14405.58, "category_id" => $category->id]);
+
+  $data = balanceData($this, "2026-09-01");
+  $card = collect($data["expenses"])->firstWhere("name", "card");
+
+  expect($card["balance"])->toEqual(-(300 + 1200.47))
+    ->and(collect($data["categories"])->firstWhere("id", $category->id)["expenses_sum_amount"])->toEqual(1200.47);
+});
+
+it("rounds the share of a refund away from zero too", function () {
+  expect(App\Services\Summary::share(14405.58, 12))->toEqual(1200.47)
+    ->and(App\Services\Summary::share(-14405.58, 12))->toEqual(-1200.47)
+    ->and(App\Services\Summary::share(100.01, 3))->toEqual(33.34)
+    ->and(App\Services\Summary::share(3000, 6))->toEqual(500);
+});
+
 it("handles a partial payment and an overpayment", function () {
   $payment = Transfer::factory()->between($this->bank, $this->card)->on("2026-09-20")->create(["amount" => 100]);
 

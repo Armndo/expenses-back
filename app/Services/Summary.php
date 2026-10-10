@@ -54,6 +54,18 @@ class Summary
     });
   }
 
+  /**
+   * What an instalment bills in a month: `$amount / $instalments` rounded to cents, halves away from zero.
+   * It works on whole cents because dividing floats gives results like 1200.4649999 for an exact
+   * 1200.465, and the SQL in `spentBySource()`, the web and the app must all round the same way.
+   */
+  public static function share(float $amount, int $instalments): float {
+    $cents = (int) round($amount * 100);
+    $share = round(abs($cents) / $instalments);
+
+    return ($cents < 0 ? -$share : $share) / 100;
+  }
+
   /** First month counted by the running balance. */
   public function balanceStart(): Carbon {
     // The fallback covers a stale cached config (config:cache run before config/expenses.php existed),
@@ -135,7 +147,7 @@ class Summary
     ->where("sources.user_id", $this->user->id);
 
     return self::billedIn($query, $start)
-    ->selectRaw("expenses.source_id as source_id, coalesce(sum(case when expenses.instalments is null then expenses.amount::numeric else round((expenses.amount / expenses.instalments)::numeric, 2) end), 0) as total")
+    ->selectRaw("expenses.source_id as source_id, coalesce(sum(case when expenses.instalments is null then expenses.amount::numeric else round(expenses.amount::numeric / expenses.instalments, 2) end), 0) as total")
     ->groupBy("expenses.source_id")
     ->pluck("total", "source_id")->all();
   }
