@@ -106,7 +106,7 @@ it("bills incomes by the calendar month when the source has no cutoff or a zero 
   $last = $this->mine->incomes()->create(["date" => "2026-10-31", "amount" => 1]);
   $after = $this->mine->incomes()->create(["date" => "2026-11-01", "amount" => 1]);
 
-  expect(incomeIds($this, "2026-10-01", $this->mine->id))->toBe([$first->id, $last->id])
+  expect(incomeIds($this, "2026-10-01", $this->mine->id))->toBe([$last->id, $first->id])
     ->and(incomeIds($this, "2026-09-01", $this->mine->id))->toBe([$before->id])
     ->and(incomeIds($this, "2026-11-01", $this->mine->id))->toBe([$after->id]);
 })->with([null, 0]);
@@ -122,7 +122,7 @@ it("bills incomes by the source cutoff", function () {
 
   // October's period runs from Oct 16 to Nov 15, as it does for expenses.
   expect(incomeIds($this, "2026-09-01", $this->mine->id))->toBe([$a->id])
-    ->and(incomeIds($this, "2026-10-01", $this->mine->id))->toBe([$b->id, $c->id])
+    ->and(incomeIds($this, "2026-10-01", $this->mine->id))->toBe([$c->id, $b->id])
     ->and(incomeIds($this, "2026-11-01", $this->mine->id))->toBe([$d->id]);
 });
 
@@ -141,6 +141,13 @@ it("puts an income and an expense with the same date in the same month", functio
         ->toBe(in_array($expense->id, collect($source["expenses"])->pluck("id")->all()), "$date in $month");
     }
   }
+});
+
+it("returns the incomes of a month newest id first", function () {
+  $second = $this->mine->incomes()->create(["date" => "2026-10-02", "amount" => 1]);
+  $third = $this->mine->incomes()->create(["date" => "2026-10-01", "amount" => 1]);
+
+  expect(incomeIds($this, "2026-10-01", $this->mine->id))->toBe([$third->id, $second->id, $this->income->id]);
 });
 
 it("only returns the user's own incomes from /data", function () {

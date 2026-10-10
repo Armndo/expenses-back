@@ -50,8 +50,7 @@ class AppController extends Controller
         $query->select("incomes.*")
         ->join("sources", "sources.id", "incomes.source_id")
         ->whereRaw("incomes.date between $periodStart and $periodEnd")
-        ->orderBy("incomes.date")
-        ->orderBy("incomes.id"),
+        ->orderByDesc("incomes.id"),
     ])
     ->withCount([
       "incomes" => fn(Builder $query) =>
