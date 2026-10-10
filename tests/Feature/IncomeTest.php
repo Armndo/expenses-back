@@ -143,11 +143,11 @@ it("puts an income and an expense with the same date in the same month", functio
   }
 });
 
-it("returns the incomes of a month newest id first", function () {
-  $second = $this->mine->incomes()->create(["date" => "2026-10-02", "amount" => 1]);
-  $third = $this->mine->incomes()->create(["date" => "2026-10-01", "amount" => 1]);
+it("returns the incomes of a month by date descending and id descending", function () {
+  $sameDay = $this->mine->incomes()->create(["date" => "2026-10-01", "amount" => 1]);
+  $later = $this->mine->incomes()->create(["date" => "2026-10-02", "amount" => 1]);
 
-  expect(incomeIds($this, "2026-10-01", $this->mine->id))->toBe([$third->id, $second->id, $this->income->id]);
+  expect(incomeIds($this, "2026-10-01", $this->mine->id))->toBe([$later->id, $sameDay->id, $this->income->id]);
 });
 
 it("only returns the user's own incomes from /data", function () {
