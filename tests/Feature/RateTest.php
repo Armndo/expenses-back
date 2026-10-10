@@ -43,7 +43,7 @@ it("keeps the rates of each user apart", function () {
 it("refuses a rate that is not valid", function (string $currency, mixed $rate) {
   $this->putJson("/rates/$currency", ["rate" => $rate])->assertStatus(400);
 
-  expect(ExchangeRate::count())->toBe(0);
+  expect($this->user->exchangeRates()->count())->toBe(0);
 })->with([
   "the base currency" => ["MXN", 1],
   "an unknown currency" => ["EUR", 20],
