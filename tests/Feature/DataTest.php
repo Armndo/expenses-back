@@ -3,6 +3,7 @@
 use App\Models\Category;
 use App\Models\Expense;
 use App\Models\Source;
+use App\Models\Transfer;
 use App\Models\User;
 use Carbon\Carbon;
 use Laravel\Passport\Passport;
@@ -227,5 +228,89 @@ describe("the month", function () {
     $expense = dataSource($this, "2026-10-01", $this->none->id)["expenses"][0];
 
     expect(array_keys($expense))->toEqualCanonicalizing(["id", "amount", "description", "date", "next", "instalments", "category_id"]);
+  });
+});
+
+describe("transfers", function () {
+  it("appear in both sources, signed and with the other end", function () {
+    $transfer = Transfer::factory()->between($this->none, $this->zero)->on("2026-10-05")->create(["amount" => 100, "received_amount" => 90, "description" => "fee"]);
+
+    $out = dataSource($this, "2026-10-01", $this->none->id);
+    $in = dataSource($this, "2026-10-01", $this->zero->id);
+
+    expect($out["transfers"][0])->toMatchArray([
+      "id" => $transfer->id,
+      "direction" => "out",
+      "signed_amount" => -100,
+      "counterpart_id" => $this->zero->id,
+      "counterpart_name" => "cutoff 0",
+      "from_source_id" => $this->none->id,
+      "to_source_id" => $this->zero->id,
+      "amount" => 100,
+      "received_amount" => 90,
+      "date" => "2026-10-05",
+      "description" => "fee",
+    ])
+      ->and($in["transfers"][0])->toMatchArray([
+        "id" => $transfer->id,
+        "direction" => "in",
+        "signed_amount" => 90,
+        "counterpart_id" => $this->none->id,
+        "counterpart_name" => "no cutoff",
+      ])
+      ->and([$out["transfers_count"], $in["transfers_count"]])->toBe([1, 1]);
+  });
+
+  it("arrive as much as they sent when there is no received amount", function () {
+    Transfer::factory()->between($this->none, $this->zero)->on("2026-10-05")->create(["amount" => 100]);
+
+    expect(dataSource($this, "2026-10-01", $this->zero->id)["transfers"][0]["signed_amount"])->toEqual(100);
+  });
+
+  it("belong to the calendar month of their date, whatever the cutoffs", function () {
+    // Oct 15 is September's last day for the card's billing period, but the money moves in October.
+    $transfer = Transfer::factory()->between($this->none, $this->c15)->on("2026-10-15")->create();
+    $ids = fn ($month, $source) => collect(dataSource($this, $month, $source->id)["transfers"])->pluck("id")->all();
+
+    expect($ids("2026-10-01", $this->none))->toBe([$transfer->id])
+      ->and($ids("2026-10-01", $this->c15))->toBe([$transfer->id])
+      ->and($ids("2026-09-01", $this->none))->toBe([])
+      ->and($ids("2026-09-01", $this->c15))->toBe([])
+      ->and($ids("2026-11-01", $this->c15))->toBe([]);
+  });
+
+  it("mix the ones that leave and arrive, newest date first and then id", function () {
+    $out = Transfer::factory()->between($this->none, $this->zero)->on("2026-10-05")->create();
+    $in = Transfer::factory()->between($this->zero, $this->none)->on("2026-10-05")->create();
+    $older = Transfer::factory()->between($this->zero, $this->none)->on("2026-10-02")->create();
+    $newer = Transfer::factory()->between($this->none, $this->zero)->on("2026-10-20")->create();
+
+    $source = dataSource($this, "2026-10-01", $this->none->id);
+
+    expect(collect($source["transfers"])->pluck("id")->all())->toBe([$newer->id, $in->id, $out->id, $older->id])
+      ->and($source["transfers_count"])->toBe(4);
+  });
+
+  it("do not show other users' transfers", function () {
+    Transfer::factory()->between(Source::factory()->create(), Source::factory()->create())->on("2026-10-05")->create();
+
+    expect(dataSource($this, "2026-10-01", $this->none->id)["transfers"])->toBe([]);
+  });
+
+  it("do not leak the eager-loaded relations", function () {
+    Transfer::factory()->between($this->none, $this->zero)->on("2026-10-05")->create();
+
+    $source = dataSource($this, "2026-10-01", $this->none->id);
+
+    expect($source)->not->toHaveKeys(["outgoing_transfers", "incoming_transfers"])
+      ->and($source["transfers"][0])->not->toHaveKeys(["to", "from", "created_at"]);
+  });
+});
+
+describe("the kind of a source", function () {
+  it("is account without a cutoff and card with any cutoff, even 0", function () {
+    $kinds = collect($this->getJson("/data?date=2026-10-01")->json("expenses"))->pluck("kind", "name")->all();
+
+    expect($kinds)->toBe(["no cutoff" => "account", "cutoff 0" => "card", "cutoff 15" => "card"]);
   });
 });
