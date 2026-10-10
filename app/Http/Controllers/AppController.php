@@ -90,7 +90,12 @@ class AppController extends Controller
     foreach ($categories as $category) {
       [$instalments, $regular] = $category->expenses->partition(fn($e) => !is_null($e->instalments));
       $category->expenses_count = $regular->count() + $instalments->count();
-      $category->expenses_sum_amount = $regular->sum("amount") + $instalments->sum(fn($e) => Summary::share($e->amount, $e->instalments));
+      // In pesos: an expense of a source in another currency counts with that currency's rate.
+      $category->expenses_sum_amount = round(
+        $regular->sum(fn($e) => $summary->convert($e->amount, $e->source_id) ?? 0)
+        + $instalments->sum(fn($e) => $summary->convert(Summary::share($e->amount, $e->instalments), $e->source_id) ?? 0),
+        2
+      );
       $category->makeHidden(["expenses"]);
     }
 
@@ -98,6 +103,8 @@ class AppController extends Controller
       "expenses" => $expenses,
       "categories" => $categories,
       "summary" => $summary->totals($start),
+      // Pesos per unit of every currency with a rate (the base currency, always 1, is left out).
+      "rates" => (object) array_diff_key($summary->rates(), [Summary::baseCurrency() => 1]),
     ];
   }
 

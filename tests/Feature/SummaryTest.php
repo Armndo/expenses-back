@@ -82,6 +82,6 @@ it("moves the start month with the config", function () {
 it("leaves the rest of /data as it was", function () {
   $json = $this->getJson("/data?date=2026-10-01")->assertOk()->json();
 
-  expect(array_keys($json))->toBe(["expenses", "categories", "summary"])
+  expect(array_keys($json))->toBe(["expenses", "categories", "summary", "rates"])
     ->and(collect($json["expenses"])->pluck("name")->all())->toBe(["bank", "card"]);
 });

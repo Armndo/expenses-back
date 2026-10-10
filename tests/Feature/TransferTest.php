@@ -38,6 +38,8 @@ it("creates a transfer between the user's own sources", function () {
 });
 
 it("keeps the received amount when there is one", function () {
+  $this->bank2->update(["currency" => "USD"]);
+
   $this->postJson("/transfers", transferBody($this, ["to_source_id" => $this->bank2->id, "received_amount" => 240]))->assertCreated();
 
   expect(Transfer::where("description", "card payment")->first()->received_amount)->toBe(240.0);
@@ -116,4 +118,43 @@ it("refuses to update or delete a missing, foreign or half-foreign transfer", fu
   }
 
   expect($foreign->fresh()->amount)->toBe(5.0)->and($half->fresh()->amount)->toBe(7.0);
+});
+
+it("needs the received amount between currencies", function () {
+  $this->bank2->update(["currency" => "USD"]);
+
+  $this->postJson("/transfers", transferBody($this, ["from_source_id" => $this->bank2->id, "to_source_id" => $this->bank->id]))->assertStatus(400);
+  $this->postJson("/transfers", transferBody($this, ["from_source_id" => $this->bank2->id, "to_source_id" => $this->bank->id, "received_amount" => 0]))->assertStatus(400);
+  $this->postJson("/transfers", transferBody($this, ["from_source_id" => $this->bank2->id, "to_source_id" => $this->bank->id, "received_amount" => 1780]))->assertCreated();
+});
+
+it("refuses a received amount within one currency", function () {
+  $before = Transfer::count();
+
+  $this->postJson("/transfers", transferBody($this, ["received_amount" => 240]))->assertStatus(400);
+
+  expect(Transfer::count())->toBe($before);
+});
+
+it("checks the received amount again when a transfer changes currencies", function () {
+  $this->bank2->update(["currency" => "USD"]);
+
+  // Same-currency transfer (no received amount) moved to a dollar source.
+  $this->putJson("/transfers/{$this->transfer->id}", ["to_source_id" => $this->bank2->id])->assertStatus(400);
+  $this->putJson("/transfers/{$this->transfer->id}", ["to_source_id" => $this->bank2->id, "received_amount" => 5.6])->assertOk();
+
+  expect($this->transfer->fresh()->received_amount)->toBe(5.6);
+
+  // And back to pesos it has to drop it.
+  $this->putJson("/transfers/{$this->transfer->id}", ["to_source_id" => $this->card->id])->assertStatus(400);
+  $this->putJson("/transfers/{$this->transfer->id}", ["to_source_id" => $this->card->id, "received_amount" => null])->assertOk();
+});
+
+it("keeps the received amount of a conversion when only other fields change", function () {
+  $this->bank2->update(["currency" => "USD"]);
+  $this->transfer->update(["to_source_id" => $this->bank2->id, "received_amount" => 5.6]);
+
+  $this->putJson("/transfers/{$this->transfer->id}", ["description" => "usd"])->assertOk();
+
+  expect($this->transfer->fresh()->received_amount)->toBe(5.6);
 });

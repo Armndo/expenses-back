@@ -14,6 +14,7 @@ class Source extends Model
   protected $fillable = [
     "name",
     "cutoff",
+    "currency",
   ];
 
   protected $hidden = [

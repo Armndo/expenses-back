@@ -19,6 +19,11 @@ class SourceFactory extends Factory
         ];
     }
 
+    public function currency(string $currency): static
+    {
+        return $this->state(fn () => ['currency' => $currency]);
+    }
+
     /** A source billed from `$day` (see "Billing period" in CLAUDE.md). */
     public function cutoff(int $day): static
     {
