@@ -66,7 +66,8 @@ class TransferController extends Controller
 
   /**
    * Both sources are the user's and different, `amount` is a positive number, `date` a date and
-   * `received_amount` empty or a positive number. On update ($current set) only what is sent is checked,
+   * `received_amount` a positive number when the currencies of the two sources differ and empty when they
+   * are the same. On update ($current set) only what is sent is checked,
    * against the transfer's current values for the rest.
    */
   private function valid(Request $request, User $user, ?Transfer $current): bool {
@@ -84,6 +85,14 @@ class TransferController extends Controller
     }
 
     if ($request->filled("received_amount") && (!is_numeric($request->received_amount) || (float) $request->received_amount <= 0)) {
+      return false;
+    }
+
+    // Between currencies the amount that arrives is required; within one it must be empty (it is the same).
+    $received = $request->has("received_amount") || !$current ? $request->received_amount : $current->received_amount;
+    $currencies = $user->sources()->whereIn("id", [$from, $to])->pluck("currency", "id");
+
+    if (($currencies[$from] !== $currencies[$to]) !== ($received !== null && $received !== "")) {
       return false;
     }
 

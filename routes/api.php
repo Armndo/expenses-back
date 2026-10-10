@@ -3,6 +3,8 @@
 use App\Http\Controllers\AppController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\IncomeController;
+use App\Http\Controllers\RateController;
+use App\Http\Controllers\SourceController;
 use App\Http\Controllers\TransferController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
@@ -34,4 +36,7 @@ Route::middleware("auth:api")->group(function() {
     Route::put("transfers/{transfer_id}", "update");
     Route::delete("transfers/{transfer_id}", "destroy");
   });
+
+  Route::put("sources/{source_id}", [SourceController::class, "update"]);
+  Route::put("rates/{currency}", [RateController::class, "update"]);
 });

@@ -14,11 +14,20 @@ use Carbon\Carbon;
  * A source's position up to a month is `incomes - billed expenses - transfers out + transfers in`,
  * counted from `expenses.balance_start`. The balance is the sum of the positions, "cash" the sum of the
  * accounts (sources without cutoff) and "debt" what the cards (sources with a cutoff) owe.
+ *
+ * Every source keeps its own currency; the totals are converted to pesos with the user's exchange rates
+ * (the current rate, for all the history).
  */
 class Summary
 {
   /** @var array<string, array<int, float>|null> */
   private array $positions = [];
+
+  /** @var array<string, float>|null */
+  private ?array $rates = null;
+
+  /** @var array<int, string>|null */
+  private ?array $currencies = null;
 
   public function __construct(private User $user) {}
 
@@ -73,6 +82,56 @@ class Summary
     return Carbon::parse(config("expenses.balance_start") ?? "2026-09-01")->startOfMonth();
   }
 
+  /** Currency every amount is converted to (its rate is always 1). */
+  public static function baseCurrency(): string {
+    return config("expenses.currencies", ["MXN", "USD"])[0];
+  }
+
+  /** Pesos per unit of each currency the user has a rate for (the base one included). */
+  public function rates(): array {
+    return $this->rates ??= [self::baseCurrency() => 1.0] + $this->user->exchangeRates()->pluck("rate", "currency")->map(fn($rate) => (float) $rate)->all();
+  }
+
+  /** Currencies of the user's sources that have no exchange rate, so their amounts cannot be converted. */
+  public function missingRates(): array {
+    return array_values(array_unique(array_filter(
+      $this->sourceCurrencies(),
+      fn($currency) => !array_key_exists($currency, $this->rates()),
+    )));
+  }
+
+  /** @return array<int, string> source id => currency */
+  private function sourceCurrencies(): array {
+    return $this->currencies ??= $this->user->sources()->pluck("currency", "id")->all();
+  }
+
+  /**
+   * Adds up amounts by source (id => amount in the source's currency) in pesos. A source whose currency
+   * has no rate adds nothing: `missingRates()` says that it happened.
+   */
+  private function toBase(array $amounts): float {
+    $total = 0.0;
+
+    foreach ($amounts as $source_id => $amount) {
+      $rate = $this->rates()[$this->sourceCurrencies()[$source_id] ?? self::baseCurrency()] ?? null;
+
+      if ($rate !== null) {
+        $total += (float) $amount * $rate;
+      }
+    }
+
+    return round($total, 2);
+  }
+
+  /**
+   * Converts one amount of a source to pesos with the source's rate, or null when it has none.
+   */
+  public function convert(float $amount, int $source_id): ?float {
+    $rate = $this->rates()[$this->sourceCurrencies()[$source_id] ?? self::baseCurrency()] ?? null;
+
+    return $rate === null ? null : $amount * $rate;
+  }
+
   /**
    * Position of every source (id => amount) up to the month starting at `$start`, or `null` when the
    * month is before the balance start (or absurdly far after it).
@@ -112,25 +171,28 @@ class Summary
   }
 
   /**
-   * Totals of the month starting at `$start`:
+   * Totals of the month starting at `$start`, in pesos:
    * - `spent`, `income`: the month's own (income by source cutoff, like expenses).
    * - `cash`, `debt`, `total_money`: from the positions (`total_money = cash - debt`, the running
-   *   balance). All `null` before the balance start.
+   *   balance). All `null` before the balance start, and also when a source's currency has no rate.
+   * - `missing_rates`: currencies in use without an exchange rate (their sources add nothing to `spent`
+   *   and `income`).
    */
   public function totals(string $start): array {
     $totals = [
-      "spent" => array_sum($this->spentBySource($start)),
-      "income" => array_sum($this->incomeBySource($start, $start)),
+      "spent" => $this->toBase($this->spentBySource($start)),
+      "income" => $this->toBase($this->incomeBySource($start, $start)),
       "cash" => null,
       "debt" => null,
       "total_money" => null,
+      "missing_rates" => $this->missingRates(),
     ];
 
-    if (($positions = $this->positions($start)) !== null) {
+    if (($positions = $this->positions($start)) !== null && !$totals["missing_rates"]) {
       $cards = $this->user->sources()->whereNotNull("cutoff")->pluck("id")->all();
-      $totals["debt"] = -array_sum(array_intersect_key($positions, array_flip($cards)));
-      $totals["cash"] = array_sum(array_diff_key($positions, array_flip($cards)));
-      $totals["total_money"] = $totals["cash"] - $totals["debt"];
+      $totals["debt"] = -$this->toBase(array_intersect_key($positions, array_flip($cards)));
+      $totals["cash"] = $this->toBase(array_diff_key($positions, array_flip($cards)));
+      $totals["total_money"] = round($totals["cash"] - $totals["debt"], 2);
     }
 
     return $totals;
