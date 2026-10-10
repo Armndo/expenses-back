@@ -3,6 +3,7 @@
 use App\Http\Controllers\AppController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\IncomeController;
+use App\Http\Controllers\TransferController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -26,5 +27,11 @@ Route::middleware("auth:api")->group(function() {
     Route::post("incomes", "store");
     Route::put("incomes/{income_id}", "update");
     Route::delete("incomes/{income_id}", "destroy");
+  });
+
+  Route::controller(TransferController::class)->group(function() {
+    Route::post("transfers", "store");
+    Route::put("transfers/{transfer_id}", "update");
+    Route::delete("transfers/{transfer_id}", "destroy");
   });
 });

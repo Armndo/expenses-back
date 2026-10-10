@@ -21,6 +21,9 @@ it("requires a token on every route but /login", function (string $method, strin
   ["POST", "/incomes"],
   ["PUT", "/incomes/1"],
   ["DELETE", "/incomes/1"],
+  ["POST", "/transfers"],
+  ["PUT", "/transfers/1"],
+  ["DELETE", "/transfers/1"],
 ]);
 
 it("rejects a login with a wrong password or an unknown email", function (string $email, string $password) {
