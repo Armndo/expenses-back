@@ -9,12 +9,10 @@ Laravel 11 REST API for personal expense tracking. PHP 8.2+, PostgreSQL, Laravel
 ## Commands
 
 - **Dev server**: `composer run dev` (starts PHP server, queue, Pail logs, and Vite concurrently)
-- **Tests**: `./vendor/bin/pest`
-- **Single test**: `./vendor/bin/pest --filter="test name"` or `./vendor/bin/pest tests/Feature/ExampleTest.php`
-- **Tests hit a real DB**: `phpunit.xml` doesn't set one, so they use whatever `.env` points to (the remote dev DB). Run DB-touching tests against the local `expenses_test` database (needs migrations + `php artisan passport:client --personal` once):
-  `DB_CONNECTION=pgsql_local DB_DATABASE_LOCAL=expenses_test ./vendor/bin/pest`
-  `tests/Feature/AuthTokenTest.php` skips itself unless the DB is named `expenses_test`. Never run `RefreshDatabase` against `expenses` or the remote DB.
-- Routes have no `/api` prefix (`apiPrefix: "/"` in `bootstrap/app.php`), so tests call `/login`, `/data`, etc. `users` requires `username` and `lastname`, which `UserFactory` doesn't fill.
+- **Tests**: `./vendor/bin/pest` (single file: `./vendor/bin/pest tests/Feature/DataTest.php`, single test: `--filter="test name"`)
+- **Tests always run against the local `expenses_test` database**: `phpunit.xml` forces `DB_CONNECTION=pgsql_local` and `DB_DATABASE_LOCAL=expenses_test`, so no env vars are needed. The database needs its migrations (`DB_CONNECTION=pgsql_local DB_DATABASE_LOCAL=expenses_test php artisan migrate`) and the local connection settings (`DB_HOST_LOCAL`, `DB_USERNAME_LOCAL`, ... in `.env`). `Tests\TestCase` throws on every test unless the database name ends in `_test`, and creates the Passport personal access client when it is missing. Every Feature test runs inside a rolled-back transaction (`DatabaseTransactions` in `tests/Pest.php`); never use `RefreshDatabase`. A failed SQL statement poisons the Postgres transaction, so do not query after an assertion on a 400 caused by a database error.
+- **Factories** (`database/factories`): `User` (password is `password`), `Source` (`->cutoff(15)`), `Category`, `Expense` (`->next()`, `->instalments(3)`, `->on("2026-10-01")`) and `Income` (`->on(...)`). Use `Source::factory()->for($user)` and `Expense::factory()->for($source)`. Tests are in `tests/Feature`: `AuthTokenTest`, `UserTest`, `ExpenseTest`, `IncomeTest`, `DataTest` (billing periods, `next`, instalments, category sums) and `SummaryTest`.
+- Routes have no `/api` prefix (`apiPrefix: "/"` in `bootstrap/app.php`), so tests call `/login`, `/data`, etc.
 - **Code formatting**: `./vendor/bin/pint`
 - **Migrations**: `php artisan migrate`
 
