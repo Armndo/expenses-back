@@ -11,8 +11,9 @@
 |
 */
 
+// Every test runs inside a transaction that is rolled back (see Tests\TestCase for the database guard).
 pest()->extend(Tests\TestCase::class)
- // ->use(Illuminate\Foundation\Testing\RefreshDatabase::class)
+    ->use(Illuminate\Foundation\Testing\DatabaseTransactions::class)
     ->in('Feature');
 
 /*

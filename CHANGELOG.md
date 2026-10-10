@@ -1,3 +1,36 @@
+## 0.4.0 (2026-10-10)
+
+### Feat
+
+- **summary**: subtract the pending instalments from the balance
+- **appcontroller**: add the previous balance of each source to GET /data
+- **currency**: value sources in other currencies with an exchange rate
+- **appcontroller**: add transfers and the cash and debt split to GET /data
+- **transfercontroller**: create, update and delete transfers
+- **transfers**: add the transfers table and tell cards from accounts
+- **factories**: add factories for sources, categories, expenses and incomes
+- **appcontroller**: add the running balance to GET /data as summary
+- **appcontroller**: order the incomes of a month by id descending
+- **incomecontroller**: create, update and delete incomes
+- **appcontroller**: bill incomes by the source cutoff period
+- **usercontroller**: per-device token lifetime and logout revoking only current token
+- reworked query using claude :)
+- added next field for Expense model, change queries to include it (next period expenses)
+
+### Fix
+
+- **summary**: round instalment shares on whole cents, halves away from zero
+- **summary**: round each instalment share to cents like the bank bills it
+- **appcontroller**: make the balance previous + income - spent of the same month
+- **appcontroller**: order incomes like expenses, by date and id descending
+- **expensecontroller**: require target source to belong to the user when moving an expense
+- **usercontroller**: fall back to web when device is not a string
+- **appcontroller**: corrected the type in queries to HasMany
+
+### Refactor
+
+- **appcontroller**: share the expense period filter
+
 ## 0.3.0 (2025-11-17)
 
 ### BREAKING CHANGE
