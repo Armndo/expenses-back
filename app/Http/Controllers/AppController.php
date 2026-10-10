@@ -18,33 +18,15 @@ class AppController extends Controller
     $date->day = 1;
     $start = $date->format("Y-m-d");
 
-    // Billing period of the month: from the source cutoff to the day before the next one
-    // (a source without cutoff falls back to the calendar month).
-    $periodStart = "date(date_trunc('month', '$start'::date)::date + coalesce(sources.cutoff, 0))";
-    $periodEnd = "date(date_trunc('month', '$start'::date)::date + interval '1 month') - 1 + coalesce(sources.cutoff, 0)";
+    [$periodStart, $periodEnd] = $this->period($start);
 
     $sources = $user->sources()
     ->with([
       "expenses" => fn(HasMany $query) =>
         $query->select("expenses.*")
         ->join("sources", "sources.id", "expenses.source_id")
-        ->where(function ($q) use ($start) {
-          $q->where(function ($q) use ($start) {
-            $q->whereRaw(<<<SQL
-              case "next" when true then date("date" + interval '1 month') else "date" end between
-                date(date_trunc('month', '$start'::date)::date + coalesce(sources.cutoff, 0)) and
-                date(date_trunc('month', '$start'::date)::date + interval '1 month') - 1 + coalesce(sources.cutoff, 0)
-            SQL)
-            ->whereNull("instalments");
-          })->orWhere(function ($q) use ($start) {
-            $q->whereRaw(<<<SQL
-              date(case "next" when true then date("date" + interval '1 month') else "date" end + interval '1 month' * (instalments - 1)) >= date(date_trunc('month', '$start'::date)::date + coalesce(sources.cutoff, 0)) and
-              case "next" when true then date("date" + interval '1 month') else "date" end <= date(date_trunc('month', '$start'::date)::date + interval '1 month') - 1 + coalesce(sources.cutoff, 0)
-            SQL)
-            ->whereNotNull("instalments");
-          });
-        })
-        ->orderByDesc("date")
+        ->tap(fn($q) => $this->billedIn($q, $start))
+        ->orderByDesc("expenses.date")
         ->orderByDesc("expenses.id"),
       "incomes" => fn(HasMany $query) =>
         $query->select("incomes.*")
@@ -81,22 +63,7 @@ class AppController extends Controller
         $query->select("expenses.*")
         ->whereIn("expenses.source_id", $source_ids)
         ->join("sources", "sources.id", "expenses.source_id")
-        ->where(function ($q) use ($start) {
-          $q->where(function ($q) use ($start) {
-            $q->whereRaw(<<<SQL
-              case expenses.next when true then date(expenses.date + interval '1 month') else expenses.date end between
-                date(date_trunc('month', '$start'::date)::date + coalesce(sources.cutoff, 0)) and
-                date(date_trunc('month', '$start'::date)::date + interval '1 month') - 1 + coalesce(sources.cutoff, 0)
-            SQL)
-            ->whereNull("instalments");
-          })->orWhere(function ($q) use ($start) {
-            $q->whereRaw(<<<SQL
-              date(case expenses.next when true then date(expenses.date + interval '1 month') else expenses.date end + interval '1 month' * (expenses.instalments - 1)) >= date(date_trunc('month', '$start'::date)::date + coalesce(sources.cutoff, 0)) and
-              case expenses.next when true then date(expenses.date + interval '1 month') else expenses.date end <= date(date_trunc('month', '$start'::date)::date + interval '1 month') - 1 + coalesce(sources.cutoff, 0)
-            SQL)
-            ->whereNotNull("instalments");
-          });
-        })
+        ->tap(fn($q) => $this->billedIn($q, $start))
     ])
     ->get();
 
@@ -111,5 +78,37 @@ class AppController extends Controller
       "expenses" => $expenses,
       "categories" => $categories,
     ];
+  }
+
+  /**
+   * Billing period of the month starting at `$start`, as SQL expressions over `sources`: from the
+   * source cutoff to the day before the next one (a source without cutoff falls back to the
+   * calendar month).
+   */
+  private function period(string $start): array {
+    return [
+      "date(date_trunc('month', '$start'::date)::date + coalesce(sources.cutoff, 0))",
+      "date(date_trunc('month', '$start'::date)::date + interval '1 month') - 1 + coalesce(sources.cutoff, 0)",
+    ];
+  }
+
+  /**
+   * Restricts an expenses query (already joined with `sources`) to the expenses billed in the period
+   * starting at `$start`: regular ones by their effective date, instalments while any of their N
+   * periods overlaps it. The effective date is `date`, or `date + 1 month` when `next` is true.
+   */
+  private function billedIn($query, string $start) {
+    [$periodStart, $periodEnd] = $this->period($start);
+    $effective = "case expenses.next when true then date(expenses.date + interval '1 month') else expenses.date end";
+
+    return $query->where(function ($q) use ($periodStart, $periodEnd, $effective) {
+      $q->where(function ($q) use ($periodStart, $periodEnd, $effective) {
+        $q->whereRaw("$effective between $periodStart and $periodEnd")
+        ->whereNull("expenses.instalments");
+      })->orWhere(function ($q) use ($periodStart, $periodEnd, $effective) {
+        $q->whereRaw("date($effective + interval '1 month' * (expenses.instalments - 1)) >= $periodStart and $effective <= $periodEnd")
+        ->whereNotNull("expenses.instalments");
+      });
+    });
   }
 }
