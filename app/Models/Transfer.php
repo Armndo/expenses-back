@@ -5,40 +5,38 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class Expense extends Model
+class Transfer extends Model
 {
   use HasFactory;
 
   protected $dateFormat = "Y-m-d H:i:sO";
 
   protected $fillable = [
+    "from_source_id",
+    "to_source_id",
     "amount",
-    "description",
+    "received_amount",
     "date",
-    "next",
-    "instalments",
-    "category_id",
-    "source_id",
+    "description",
   ];
 
   protected $hidden = [
     "created_at",
     "updated_at",
-    "source_id",
   ];
 
   protected $casts = [
     "amount" => "float",
-    "next" => "boolean",
+    "received_amount" => "float",
   ];
 
   public $timestamps = true;
 
-  public function source() {
-    return $this->belongsTo(Source::class);
+  public function from() {
+    return $this->belongsTo(Source::class, "from_source_id");
   }
 
-  public function category() {
-    return $this->belongsTo(Category::class);
+  public function to() {
+    return $this->belongsTo(Source::class, "to_source_id");
   }
 }

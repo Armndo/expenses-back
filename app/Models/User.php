@@ -57,4 +57,8 @@ class User extends Authenticatable
   public function sources() {
     return $this->hasMany(Source::class);
   }
+
+  public function exchangeRates() {
+    return $this->hasMany(ExchangeRate::class);
+  }
 }

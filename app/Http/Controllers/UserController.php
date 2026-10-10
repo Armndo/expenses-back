@@ -5,23 +5,34 @@ namespace App\Http\Controllers;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Laravel\Passport\Token;
+use Laravel\Passport\Passport;
+use League\OAuth2\Server\AuthorizationServer;
 
 class UserController extends Controller
 {
-  public function login(Request $request) {$credentials = $request->only(["email", "password"]);
+  // Token lifetime per client. Unknown or missing "device" falls back to the web one.
+  private const DEVICES = [
+    "web" => 1,
+    "android" => 90,
+  ];
+
+  public function login(Request $request) {
+    $credentials = $request->only(["email", "password"]);
 
     if (!Auth::attempt($credentials)) {
       return response("error", 401);
     }
 
-    $user = $request->user();
-    // Token::where("user_id", $user->id)->update(["revoked" => true]); // TODO reimplement
+    $device = $request->input("device");
+    $device = is_string($device) && array_key_exists($device, self::DEVICES) ? $device : "web";
 
-    $createdToken = $user->createToken("Access Token");
-    $token = $createdToken->token;
-    $token->expires_at = Carbon::now()->addSeconds(3);
-    $token->save();
+    $user = $request->user();
+
+    // Passport bakes the TTL into the AuthorizationServer singleton the first time it is
+    // resolved, so drop it to make it pick up this device's lifetime.
+    Passport::personalAccessTokensExpireIn(Carbon::now()->addDays(self::DEVICES[$device]));
+    app()->forgetInstance(AuthorizationServer::class);
+    $createdToken = $user->createToken($device);
 
     return [
       "token" => $createdToken->accessToken,
@@ -29,8 +40,8 @@ class UserController extends Controller
   }
 
   public function logout() {
-    $user = Auth::user();
-    Token::where("user_id", $user->id)->update(["revoked" => true]);
+    // Only the token used in this request, so other devices stay logged in.
+    Auth::user()->token()->revoke();
 
     return "ok";
   }

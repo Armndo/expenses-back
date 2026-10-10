@@ -2,16 +2,20 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Income extends Model
 {
+  use HasFactory;
+
   protected $dateFormat = "Y-m-d H:i:sO";
 
   protected $fillable = [
     "amount",
     "date",
     "description",
+    "source_id",
   ];
 
   protected $hidden = [

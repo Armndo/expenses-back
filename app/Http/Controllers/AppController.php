@@ -3,9 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\Category;
+use App\Models\Transfer;
 use App\Models\User;
+use App\Services\Summary;
 use Carbon\Carbon;
-use Illuminate\Database\Query\Builder;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -16,88 +19,111 @@ class AppController extends Controller
     $date = isset($request->date) ? new Carbon($request->date) : Carbon::now();
     $date->day = 1;
     $start = $date->format("Y-m-d");
-    $date->month += 1;
-    $date->day -= 1;
-    $end = $date->format("Y-m-d");
-    $tmp = [];
 
-    $expenses = $user->sources()
+    [$periodStart, $periodEnd] = Summary::period($start);
+
+    $sources = $user->sources()
     ->with([
-      "expenses" => fn(Builder $query) =>
+      "expenses" => fn(HasMany $query) =>
         $query->select("expenses.*")
         ->join("sources", "sources.id", "expenses.source_id")
-        ->whereRaw("date between date(date_trunc('month', '$start'::date)::date + coalesce(sources.cutoff, 0)) and date(date_trunc('month', '$start'::date)::date + interval '1 month') - 1 + coalesce(sources.cutoff, 0)")
-        ->whereNull("instalments")
-        ->orderBy("date")
-        ->orderBy("expenses.id")
-    ])->orderBy("sources.id")
-    ->get()
-    ->toArray();
-
-    $instalments = $user->sources()->with([
-      "expenses" => fn(Builder $query) =>
-        $query->select("expenses.*")
-        ->join("sources", "sources.id", "expenses.source_id")
-        ->whereRaw("date(\"date\" + interval '1 month' * (\"instalments\" - 1)) >= date(date_trunc('month', '$start'::date)::date + coalesce(sources.cutoff, 0))")
-        ->whereRaw("\"date\" <= date(date_trunc('month', '$start'::date)::date + interval '1 month') - 1 + coalesce(sources.cutoff, 0)")
-        ->whereNotNull("instalments")
-        ->orderBy("date")
-        ->orderBy("id")
-    ])->orderBy("sources.id")
-    ->get()
-    ->toArray();
-
-    foreach ($expenses as $index => $source) {
-      $expenses[$index]["expenses_count"] = sizeof($source["expenses"]);
-      $expenses[$index]["instalments_count"] = 0;
-      $expenses[$index]["instalments"] = [];
-      $tmp[$source["id"]] = $index;
-    }
-
-    foreach ($instalments as $source) {
-      $index = $tmp[$source["id"]];
-      $expenses[$index]["instalments"] = $source["expenses"];
-      $expenses[$index]["instalments_count"] = sizeof($source["expenses"]);
-    }
-
-    $incomes = $user->sources()
-    ->with([
+        ->tap(fn($q) => Summary::billedIn($q, $start))
+        ->orderByDesc("expenses.date")
+        ->orderByDesc("expenses.id"),
+      "incomes" => fn(HasMany $query) =>
+        $query->select("incomes.*")
+        ->join("sources", "sources.id", "incomes.source_id")
+        ->whereRaw("incomes.date between $periodStart and $periodEnd")
+        ->orderByDesc("incomes.date")
+        ->orderByDesc("incomes.id"),
+      "outgoingTransfers" => fn(HasMany $query) =>
+        $query->select("transfers.*")
+        ->whereRaw(Summary::calendarRange("transfers.date", $start, $start))
+        ->with("to:id,name"),
+      "incomingTransfers" => fn(HasMany $query) =>
+        $query->select("transfers.*")
+        ->whereRaw(Summary::calendarRange("transfers.date", $start, $start))
+        ->with("from:id,name"),
+    ])
+    ->withCount([
       "incomes" => fn(Builder $query) =>
-        $query->whereBetween("date", [$start, $end])
-        ->orderBy("date")
-        ->orderBy("id")
-    ])->withCount([
-      "incomes" => fn(Builder $query) =>
-        $query->whereBetween("date", [$start, $end])
-    ])->orderBy("sources.id")
-    ->get()
-    ->toArray();
+        // Correlated subquery: `sources` is the outer table, no join needed.
+        $query->whereRaw("incomes.date between $periodStart and $periodEnd")
+    ])
+    ->orderBy("sources.id")
+    ->get();
 
-    foreach ($incomes as $source) {
-      $index = $tmp[$source["id"]];
-      $expenses[$index]["incomes"] = $source["incomes"];
-      $expenses[$index]["incomes_count"] = $source["incomes_count"];
-    }
+    $source_ids = $sources->pluck("id");
+
+    $summary = new Summary($user);
+    $positions = $summary->positions($start);
+    // Position at the close of the previous month (null before the balance start): clients use it to tell
+    // whether a card carries debt from earlier periods.
+    $previous = $summary->positions(Carbon::parse($start)->subMonth()->format("Y-m-d"));
+
+    $expenses = $sources->map(function ($source) use ($positions, $previous) {
+      [$instalments, $regular] = $source->expenses->partition(fn($e) => !is_null($e->instalments));
+      $transfers = $source->outgoingTransfers->map(fn($t) => $this->transferItem($t, "out"))
+        ->concat($source->incomingTransfers->map(fn($t) => $this->transferItem($t, "in")))
+        ->sortBy([["date", "desc"], ["id", "desc"]])->values();
+      $arr = $source->toArray();
+      unset($arr["outgoing_transfers"], $arr["incoming_transfers"]);
+      $arr["expenses"] = $regular->values()->toArray();
+      $arr["expenses_count"] = $regular->count();
+      $arr["instalments"] = $instalments->values()->toArray();
+      $arr["instalments_count"] = $instalments->count();
+      $arr["transfers"] = $transfers->all();
+      $arr["transfers_count"] = $transfers->count();
+      $arr["balance"] = $positions[$source->id] ?? null;
+      $arr["previous_balance"] = $previous[$source->id] ?? null;
+
+      return $arr;
+    })->toArray();
 
     $categories = Category::orderBy("order")
     ->orderBy("name")
-    ->withCount([
-      "expenses" => fn(Builder $query) =>
-        $query->whereIn("expenses.source_id", $user->sources->pluck("id"))
+    ->with([
+      "expenses" => fn(HasMany $query) =>
+        $query->select("expenses.*")
+        ->whereIn("expenses.source_id", $source_ids)
         ->join("sources", "sources.id", "expenses.source_id")
-        ->whereRaw("expenses.date between date(date_trunc('month', '$start'::date)::date + coalesce(sources.cutoff, 0)) and date(date_trunc('month', '$start'::date)::date + interval '1 month') - 1 + coalesce(sources.cutoff, 0)")
+        ->tap(fn($q) => Summary::billedIn($q, $start))
     ])
-    ->withSum([
-      "expenses" => fn(Builder $query) =>
-        $query->whereIn("expenses.source_id", $user->sources->pluck("id"))
-        ->join("sources", "sources.id", "expenses.source_id")
-        ->whereRaw("expenses.date between date(date_trunc('month', '$start'::date)::date + coalesce(sources.cutoff, 0)) and date(date_trunc('month', '$start'::date)::date + interval '1 month') - 1 + coalesce(sources.cutoff, 0)")
-    ], "amount")
     ->get();
+
+    foreach ($categories as $category) {
+      [$instalments, $regular] = $category->expenses->partition(fn($e) => !is_null($e->instalments));
+      $category->expenses_count = $regular->count() + $instalments->count();
+      // In pesos: an expense of a source in another currency counts with that currency's rate.
+      $category->expenses_sum_amount = round(
+        $regular->sum(fn($e) => $summary->convert($e->amount, $e->source_id) ?? 0)
+        + $instalments->sum(fn($e) => $summary->convert(Summary::share($e->amount, $e->instalments), $e->source_id) ?? 0),
+        2
+      );
+      $category->makeHidden(["expenses"]);
+    }
 
     return [
       "expenses" => $expenses,
       "categories" => $categories,
+      "summary" => $summary->totals($start),
+      // Pesos per unit of every currency with a rate (the base currency, always 1, is left out).
+      "rates" => (object) array_diff_key($summary->rates(), [Summary::baseCurrency() => 1]),
+    ];
+  }
+
+  /** A transfer as seen from one of its two sources: signed amount in that source's currency and the other end. */
+  private function transferItem(Transfer $transfer, string $direction): array {
+    $out = $direction === "out";
+    $counterpart = $out ? $transfer->to : $transfer->from;
+    $item = $transfer->toArray();
+    unset($item["to"], $item["from"]);
+
+    return $item + [
+      "direction" => $direction,
+      "signed_amount" => $out ? -$transfer->amount : ($transfer->received_amount ?? $transfer->amount),
+      "counterpart_id" => $counterpart->id,
+      "counterpart_name" => $counterpart->name,
     ];
   }
 }
