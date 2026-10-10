@@ -66,6 +66,21 @@ it("rounds an exact half cent the same in the balance and in the category sums",
     ->and(collect($data["categories"])->firstWhere("id", $category->id)["expenses_sum_amount"])->toEqual(1200.47);
 });
 
+it("subtracts the whole instalment purchase from its first period and then stops moving", function () {
+  // 12 x 1200.47 = 14405.64 billed in total (each share rounded to cents, as the bank does).
+  Expense::factory()->for($this->card)->on("2026-09-20")->instalments(12)->create(["amount" => 14405.58]);
+  $before = balanceTotals($this, "2026-09-01")["total_money"];
+
+  $months = ["2026-09-01", "2026-10-01", "2026-11-01", "2027-03-01", "2027-08-01", "2027-09-01"];
+  $totals = collect($months)->map(fn ($m) => balanceData($this, $m)["summary"]);
+
+  expect($totals[0]["pending_instalments"])->toEqual(11 * 1200.47)
+    ->and($totals[4]["pending_instalments"])->toEqual(0)
+    // The purchase weighs 12 x 1200.47 from September on, whatever the month.
+    ->and($totals->pluck("total_money")->unique()->count())->toBe(1)
+    ->and($totals[0]["total_money"])->toEqualWithDelta($before, 0.001);
+});
+
 it("rounds the share of a refund away from zero too", function () {
   expect(App\Services\Summary::share(14405.58, 12))->toEqual(1200.47)
     ->and(App\Services\Summary::share(-14405.58, 12))->toEqual(-1200.47)
@@ -99,7 +114,7 @@ it("never moves the balance of any month with a payment dated between two cutoff
     ->and(balanceTotals($this, "2026-10-01"))->toBe(["cash" => 650.0, "debt" => 0.0, "total_money" => 650.0]);
 });
 
-it("always has total_money equal to cash minus debt", function () {
+it("always has total_money equal to cash minus debt minus the pending instalments", function () {
   Income::factory()->for($this->bank)->on("2026-10-08")->create(["amount" => 500]);
   Expense::factory()->for($this->card)->on("2026-10-20")->instalments(3)->create(["amount" => 900]);
   Transfer::factory()->between($this->bank, $this->card)->on("2026-10-25")->create(["amount" => 123.45]);
@@ -107,9 +122,9 @@ it("always has total_money equal to cash minus debt", function () {
   Transfer::factory()->between($this->bank2, $this->card)->on("2026-11-20")->create(["amount" => 30]);
 
   foreach (["2026-09-01", "2026-10-01", "2026-11-01", "2026-12-01", "2027-01-01"] as $month) {
-    $totals = balanceTotals($this, $month);
+    $totals = balanceData($this, $month)["summary"];
 
-    expect($totals["total_money"])->toEqualWithDelta($totals["cash"] - $totals["debt"], 0.011, $month);
+    expect($totals["total_money"])->toEqualWithDelta($totals["cash"] - $totals["debt"] - $totals["pending_instalments"], 0.011, $month);
   }
 });
 

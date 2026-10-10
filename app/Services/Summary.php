@@ -7,13 +7,16 @@ use App\Models\Income;
 use App\Models\Transfer;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Money math of a user, computed from the billing periods of each source.
  *
  * A source's position up to a month is `incomes - billed expenses - transfers out + transfers in`,
  * counted from `expenses.balance_start`. The balance is the sum of the positions, "cash" the sum of the
- * accounts (sources without cutoff) and "debt" what the cards (sources with a cutoff) owe.
+ * accounts (sources without cutoff) and "debt" what the cards (sources with a cutoff) owe. The balance
+ * ("total_money") also subtracts the instalments still to be billed, so a purchase weighs whole from its
+ * first period.
  *
  * Every source keeps its own currency; the totals are converted to pesos with the user's exchange rates
  * (the current rate, for all the history).
@@ -173,8 +176,10 @@ class Summary
   /**
    * Totals of the month starting at `$start`, in pesos:
    * - `spent`, `income`: the month's own (income by source cutoff, like expenses).
-   * - `cash`, `debt`, `total_money`: from the positions (`total_money = cash - debt`, the running
-   *   balance). All `null` before the balance start, and also when a source's currency has no rate.
+   * - `cash`, `debt`: from the positions. `pending_instalments`: what the instalments already started
+   *   will still bill. `total_money = cash - debt - pending_instalments`, the running balance with
+   *   every instalment purchase counted whole from its first period. All `null` before the balance
+   *   start, and also when a source's currency has no rate.
    * - `missing_rates`: currencies in use without an exchange rate (their sources add nothing to `spent`
    *   and `income`).
    */
@@ -184,6 +189,7 @@ class Summary
       "income" => $this->toBase($this->incomeBySource($start, $start)),
       "cash" => null,
       "debt" => null,
+      "pending_instalments" => null,
       "total_money" => null,
       "missing_rates" => $this->missingRates(),
     ];
@@ -192,10 +198,35 @@ class Summary
       $cards = $this->user->sources()->whereNotNull("cutoff")->pluck("id")->all();
       $totals["debt"] = -$this->toBase(array_intersect_key($positions, array_flip($cards)));
       $totals["cash"] = $this->toBase(array_diff_key($positions, array_flip($cards)));
-      $totals["total_money"] = round($totals["cash"] - $totals["debt"], 2);
+      $totals["pending_instalments"] = $this->toBase($this->pendingBySource($start));
+      $totals["total_money"] = round($totals["cash"] - $totals["debt"] - $totals["pending_instalments"], 2);
     }
 
     return $totals;
+  }
+
+  /**
+   * What the instalments already started by the period starting at `$start` will still bill after it
+   * (id => amount in the source's currency): each one's rounded share times the periods left. The
+   * balance subtracts it up front, so a purchase in instalments weighs all at once from its first
+   * period instead of month by month. The positions of the sources do not include it: a card paid
+   * with its statement still ends at zero.
+   */
+  private function pendingBySource(string $start): array {
+    $effective = "case expenses.next when true then date(expenses.date + interval '1 month') else expenses.date end";
+    $periodEnd = self::period($start)[1];
+    $laterStart = "date(date_trunc('month', '$start'::date + interval '1 month' * later.n)::date + coalesce(sources.cutoff, 0))";
+
+    return Expense::query()
+    ->join("sources", "sources.id", "expenses.source_id")
+    ->where("sources.user_id", $this->user->id)
+    ->whereNotNull("expenses.instalments")
+    ->crossJoin(DB::raw("generate_series(1, expenses.instalments - 1) as later(n)"))
+    ->whereRaw("$effective <= $periodEnd")
+    ->whereRaw("$laterStart <= date($effective + interval '1 month' * (expenses.instalments - 1))")
+    ->selectRaw("expenses.source_id as source_id, sum(round(expenses.amount::numeric / expenses.instalments, 2)) as total")
+    ->groupBy("expenses.source_id")
+    ->pluck("total", "source_id")->all();
   }
 
   /**

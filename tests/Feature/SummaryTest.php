@@ -47,23 +47,31 @@ it("sums the month's spent and income", function () {
 });
 
 it("runs the balance from the start month, carrying it over", function () {
-  // Each month: the previous balance + its income - its spent.
-  expect(summaryOf($this, "2026-09-01")["total_money"])->toEqual(1205)         // 1525 - 320
-    ->and(summaryOf($this, "2026-10-01")["total_money"])->toEqual(1535)        // 1205 + 500 - 170
+  // Each month: the previous balance + its income - its spent - what its instalments will still bill.
+  expect(summaryOf($this, "2026-09-01")["total_money"])->toEqual(1005)         // 1525 - 320 - 200
+    ->and(summaryOf($this, "2026-10-01")["total_money"])->toEqual(1435)        // 1535 - 100
     ->and(summaryOf($this, "2026-11-01")["total_money"])->toEqual(1435)        // 1535 + 0 - 100
     ->and(summaryOf($this, "2026-12-01")["total_money"])->toEqual(1435);       // nothing moves
 });
 
+it("subtracts the instalments still to be billed, whole from their first period", function () {
+  // The 300 in 3 instalments of September: 200 left after September, 100 after October.
+  expect(summaryOf($this, "2026-09-01")["pending_instalments"])->toEqual(200)
+    ->and(summaryOf($this, "2026-10-01")["pending_instalments"])->toEqual(100)
+    ->and(summaryOf($this, "2026-11-01")["pending_instalments"])->toEqual(0)
+    ->and(summaryOf($this, "2026-08-01")["pending_instalments"])->toBeNull();
+});
+
 it("does not count what was spent before the start month", function () {
   // August's 999 is left out: the opening balance is already net of it.
-  expect(summaryOf($this, "2026-09-01")["total_money"])->toEqual(1205);
+  expect(summaryOf($this, "2026-09-01")["total_money"])->toEqual(1005);
 });
 
 it("still starts in September 2026 when the config is stale", function () {
   config(["expenses.balance_start" => null]);
 
   expect(summaryOf($this, "2026-08-01")["total_money"])->toBeNull()
-    ->and(summaryOf($this, "2026-09-01")["total_money"])->toEqual(1205);
+    ->and(summaryOf($this, "2026-09-01")["total_money"])->toEqual(1005);
 });
 
 it("has no balance before the start month", function () {
@@ -75,8 +83,8 @@ it("moves the start month with the config", function () {
   config(["expenses.balance_start" => "2026-10-01"]);
 
   expect(summaryOf($this, "2026-09-01")["total_money"])->toBeNull()
-    ->and(summaryOf($this, "2026-10-01")["total_money"])->toEqual(330)        // 500 - 170
-    ->and(summaryOf($this, "2026-11-01")["total_money"])->toEqual(230);        // 330 + 0 - 100
+    ->and(summaryOf($this, "2026-10-01")["total_money"])->toEqual(230)        // 500 - 170 - 100 (the November instalment of the September purchase)
+    ->and(summaryOf($this, "2026-11-01")["total_money"])->toEqual(230);        // 230 + 0 - 100 + 100
 });
 
 it("leaves the rest of /data as it was", function () {
