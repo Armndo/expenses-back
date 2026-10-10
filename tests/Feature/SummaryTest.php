@@ -1,28 +1,16 @@
 <?php
 
 use App\Models\User;
-use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Laravel\Passport\Passport;
-
-// Same setup as AuthTokenTest: DB_CONNECTION=pgsql_local DB_DATABASE_LOCAL=expenses_test
-uses(DatabaseTransactions::class);
-
-function summaryUser(): User {
-  return User::factory()->create(["username" => fake()->unique()->userName(), "lastname" => fake()->lastName()]);
-}
 
 function summaryOf($test, string $month): array {
   return $test->getJson("/data?date=$month")->assertOk()->json("summary");
 }
 
 beforeEach(function () {
-  if (DB::connection()->getDatabaseName() !== "expenses_test") {
-    $this->markTestSkipped("Set DB_DATABASE_LOCAL=expenses_test (see top of file).");
-  }
-
   config(["expenses.balance_start" => "2026-09-01"]);
 
-  $this->user = summaryUser();
+  $this->user = User::factory()->create();
   $bank = $this->user->sources()->create(["name" => "bank"]);
   $card = $this->user->sources()->create(["name" => "card", "cutoff" => 15]);
 
@@ -43,7 +31,7 @@ beforeEach(function () {
   $card->expenses()->create(["date" => "2026-10-16", "amount" => 30]); // first day of October's
 
   // Someone else's money must not leak in.
-  $theirs = summaryUser()->sources()->create(["name" => "theirs"]);
+  $theirs = User::factory()->create()->sources()->create(["name" => "theirs"]);
   $theirs->incomes()->create(["date" => "2026-09-01", "amount" => 7777]);
   $theirs->expenses()->create(["date" => "2026-09-01", "amount" => 5000]);
 

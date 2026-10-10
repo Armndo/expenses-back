@@ -1,16 +1,9 @@
 <?php
 
 use App\Models\Income;
+use App\Models\Source;
 use App\Models\User;
-use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Laravel\Passport\Passport;
-
-// Same setup as AuthTokenTest: DB_CONNECTION=pgsql_local DB_DATABASE_LOCAL=expenses_test
-uses(DatabaseTransactions::class);
-
-function incomeUser(): User {
-  return User::factory()->create(["username" => fake()->unique()->userName(), "lastname" => fake()->lastName()]);
-}
 
 /** Ids of the incomes /data returns for the first source in the month of $date. */
 function incomeIds($test, string $date, int $source_id): array {
@@ -22,15 +15,11 @@ function incomeIds($test, string $date, int $source_id): array {
 }
 
 beforeEach(function () {
-  if (DB::connection()->getDatabaseName() !== "expenses_test") {
-    $this->markTestSkipped("Set DB_DATABASE_LOCAL=expenses_test (see top of file).");
-  }
-
-  $this->user = incomeUser();
-  $this->mine = $this->user->sources()->create(["name" => "mine"]);
-  $this->myOther = $this->user->sources()->create(["name" => "mine 2"]);
-  $this->theirs = incomeUser()->sources()->create(["name" => "theirs"]);
-  $this->income = $this->mine->incomes()->create(["date" => "2026-10-01", "amount" => 100, "description" => "salary"]);
+  $this->user = User::factory()->create();
+  $this->mine = Source::factory()->for($this->user)->create(["name" => "mine"]);
+  $this->myOther = Source::factory()->for($this->user)->create(["name" => "mine 2"]);
+  $this->theirs = Source::factory()->create(["name" => "theirs"]);
+  $this->income = Income::factory()->for($this->mine)->on("2026-10-01")->create(["amount" => 100, "description" => "salary"]);
 
   Passport::actingAs($this->user);
 });

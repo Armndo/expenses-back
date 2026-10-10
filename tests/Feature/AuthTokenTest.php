@@ -1,19 +1,11 @@
 <?php
 
 use App\Models\User;
-use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Laravel\Passport\Token;
 
-// Runs against a local Postgres DB with a personal access client already created:
-//   DB_CONNECTION=pgsql_local DB_DATABASE_LOCAL=expenses_test ./vendor/bin/pest tests/Feature/AuthTokenTest.php
-uses(DatabaseTransactions::class);
-
 beforeEach(function () {
-  if (DB::connection()->getDatabaseName() !== "expenses_test") {
-    $this->markTestSkipped("Set DB_DATABASE_LOCAL=expenses_test (see top of file).");
-  }
-
-  $this->user = User::factory()->create(["username" => fake()->unique()->userName(), "lastname" => fake()->lastName(), "password" => "password"]);
+  // The factory password is "password".
+  $this->user = User::factory()->create();
 });
 
 function loginAs($test, ?string $device = null) {
