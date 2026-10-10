@@ -138,30 +138,30 @@ class AppController extends Controller
   /**
    * Totals of the month starting at `$start`:
    * - `spent`, `income`: the month's own (income by source cutoff, like expenses).
-   * - `previous_spent`: what the previous month spent, which is what gets paid this month.
    * - `total_money`: running balance, the income from `expenses.balance_start` up to this month minus
-   *   the spent of every month from the start up to the previous one. `null` before the start month
-   *   (or absurdly far after it).
+   *   the spent from the start up to this month, both included (each month's balance is the previous
+   *   one plus its income minus its spent). `null` before the start month (or absurdly far after it).
    */
   private function summary(User $user, string $start): array {
     $month = Carbon::parse($start);
-    $balanceStart = Carbon::parse(config("expenses.balance_start"))->startOfMonth();
+    // The fallback covers a stale cached config (config:cache run before config/expenses.php existed),
+    // where the key is missing and Carbon would silently parse null as "now".
+    $balanceStart = Carbon::parse(config("expenses.balance_start") ?? "2026-09-01")->startOfMonth();
 
     $summary = [
       "spent" => $this->spent($user, $start),
       "income" => $this->income($user, $start, $start),
-      "previous_spent" => $this->spent($user, $month->copy()->subMonth()->format("Y-m-d")),
       "total_money" => null,
     ];
 
     if ($month->gte($balanceStart) && $balanceStart->diffInMonths($month) <= 120) {
-      $paid = 0.0;
+      $spent = 0.0;
 
-      for ($m = $balanceStart->copy(); $m->lt($month); $m->addMonth()) {
-        $paid += $this->spent($user, $m->format("Y-m-d"));
+      for ($m = $balanceStart->copy(); $m->lte($month); $m->addMonth()) {
+        $spent += $this->spent($user, $m->format("Y-m-d"));
       }
 
-      $summary["total_money"] = $this->income($user, $balanceStart->format("Y-m-d"), $start) - $paid;
+      $summary["total_money"] = $this->income($user, $balanceStart->format("Y-m-d"), $start) - $spent;
     }
 
     return $summary;
