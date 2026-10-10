@@ -17,9 +17,11 @@ class AppController extends Controller
     $date = isset($request->date) ? new Carbon($request->date) : Carbon::now();
     $date->day = 1;
     $start = $date->format("Y-m-d");
-    $date->month += 1;
-    $date->day -= 1;
-    $end = $date->format("Y-m-d");
+
+    // Billing period of the month: from the source cutoff to the day before the next one
+    // (a source without cutoff falls back to the calendar month).
+    $periodStart = "date(date_trunc('month', '$start'::date)::date + coalesce(sources.cutoff, 0))";
+    $periodEnd = "date(date_trunc('month', '$start'::date)::date + interval '1 month') - 1 + coalesce(sources.cutoff, 0)";
 
     $sources = $user->sources()
     ->with([
@@ -45,13 +47,16 @@ class AppController extends Controller
         ->orderByDesc("date")
         ->orderByDesc("expenses.id"),
       "incomes" => fn(HasMany $query) =>
-        $query->whereBetween("date", [$start, $end])
-        ->orderBy("date")
-        ->orderBy("id"),
+        $query->select("incomes.*")
+        ->join("sources", "sources.id", "incomes.source_id")
+        ->whereRaw("incomes.date between $periodStart and $periodEnd")
+        ->orderBy("incomes.date")
+        ->orderBy("incomes.id"),
     ])
     ->withCount([
       "incomes" => fn(Builder $query) =>
-        $query->whereBetween("date", [$start, $end])
+        // Correlated subquery: `sources` is the outer table, no join needed.
+        $query->whereRaw("incomes.date between $periodStart and $periodEnd")
     ])
     ->orderBy("sources.id")
     ->get();
