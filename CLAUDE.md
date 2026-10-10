@@ -24,11 +24,12 @@ API-only application — all routes defined in `routes/api.php`, no web UI logic
 
 **Auth tokens**: `POST /login` takes an optional `device` (`android` → 90-day token, anything else → `web`, 1 day) and names the token after it. `POST /logout` revokes only the current token.
 
-**Routes** (`routes/api.php`): `POST /login` is public; everything else is under `auth:api` — `POST /logout`, `GET /info`, `GET /data`, and `POST|PUT|DELETE /expenses[/{expense_id}]`.
+**Routes** (`routes/api.php`): `POST /login` is public; everything else is under `auth:api` — `POST /logout`, `GET /info`, `GET /data`, `POST|PUT|DELETE /expenses[/{expense_id}]` and `POST|PUT|DELETE /incomes[/{income_id}]`.
 
 **Controllers:**
 - `AppController` — invokable, primary data endpoint (`GET /data?date=YYYY-MM-DD`). Defaults to the current month; the date is normalized to the month's first day. See "GET /data" below.
 - `ExpenseController` — store/update/destroy for expenses (no index/show; reads go through `/data`)
+- `IncomeController` — store/update/destroy for incomes, same ownership rules as expenses (source and move target must be the user's, `400 "error"` otherwise); `amount` must be numeric and non-zero, `date` a valid date. Tests in `tests/Feature/IncomeTest.php`.
 - `UserController` — login/logout/info with Passport token auth
 
 **Model relationships:**
@@ -43,9 +44,9 @@ API-only application — all routes defined in `routes/api.php`, no web UI logic
 
 Response: `{ "expenses": [...sources], "categories": [...] }`.
 
-- Each source in `expenses` includes its `incomes` (within the month), `incomes_count`, plus `expenses`/`expenses_count` (regular) and `instalments`/`instalments_count` (expenses with non-null `instalments`). Sources are loaded once and expenses are split with `->partition()` in PHP.
+- Each source in `expenses` includes its `incomes` (within the billing period), `incomes_count`, plus `expenses`/`expenses_count` (regular) and `instalments`/`instalments_count` (expenses with non-null `instalments`). Sources are loaded once and expenses are split with `->partition()` in PHP.
 - Each category carries `expenses_count` and `expenses_sum_amount`, computed in PHP from one eager-loaded expense set (instalments contribute `amount / instalments`); its `expenses` relation is hidden in the output.
-- **Billing period**: a month runs from `first of month + source.cutoff` days to `first of next month - 1 + cutoff`. Cutoff is per source, so the expense queries join `sources`.
+- **Billing period**: a month runs from `first of month + source.cutoff` days to `first of next month - 1 + cutoff`. Cutoff is per source (null behaves as 0, i.e. the calendar month), so the expense and income queries join `sources` (`$periodStart`/`$periodEnd` in `AppController` hold the income range). Incomes have no `next` or instalments.
 - **`next` flag**: when true, the expense's effective date is `date + 1 month` (billed in the next period). Every date filter must use that effective date, not `date`.
 - **Instalments**: an expense with `instalments = N` is active in each of N consecutive periods starting from its effective date.
 - The expense period filter exists twice (sources query with unqualified columns, categories query with `expenses.`-qualified columns). Keep both in sync when changing billing logic.

@@ -12,6 +12,7 @@ class Income extends Model
     "amount",
     "date",
     "description",
+    "source_id",
   ];
 
   protected $hidden = [
