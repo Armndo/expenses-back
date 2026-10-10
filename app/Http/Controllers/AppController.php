@@ -90,7 +90,7 @@ class AppController extends Controller
     foreach ($categories as $category) {
       [$instalments, $regular] = $category->expenses->partition(fn($e) => !is_null($e->instalments));
       $category->expenses_count = $regular->count() + $instalments->count();
-      $category->expenses_sum_amount = $regular->sum("amount") + $instalments->sum(fn($e) => $e->amount / $e->instalments);
+      $category->expenses_sum_amount = $regular->sum("amount") + $instalments->sum(fn($e) => round($e->amount / $e->instalments, 2));
       $category->makeHidden(["expenses"]);
     }
 

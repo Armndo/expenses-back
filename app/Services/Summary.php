@@ -95,7 +95,8 @@ class Summary
     $add($this->transfersOut($first, $start), -1);
     $add($this->transfersIn($first, $start), 1);
 
-    return $this->positions[$start] = $positions;
+    // Cents only: drops the floating point noise of adding and subtracting many amounts.
+    return $this->positions[$start] = array_map(fn($amount) => round($amount, 2), $positions);
   }
 
   /**
@@ -123,14 +124,18 @@ class Summary
     return $totals;
   }
 
-  /** What each source bills in the period starting at `$start`: cash expenses plus the monthly share of instalments. */
+  /**
+   * What each source bills in the period starting at `$start`: cash expenses plus the monthly share of
+   * instalments. Each share is rounded to cents, as the bank bills it, so paying a statement leaves no
+   * stray cent (the web and the app round the same way).
+   */
   private function spentBySource(string $start): array {
     $query = Expense::query()
     ->join("sources", "sources.id", "expenses.source_id")
     ->where("sources.user_id", $this->user->id);
 
     return self::billedIn($query, $start)
-    ->selectRaw("expenses.source_id as source_id, coalesce(sum(case when expenses.instalments is null then expenses.amount else expenses.amount / expenses.instalments end), 0) as total")
+    ->selectRaw("expenses.source_id as source_id, coalesce(sum(case when expenses.instalments is null then expenses.amount::numeric else round((expenses.amount / expenses.instalments)::numeric, 2) end), 0) as total")
     ->groupBy("expenses.source_id")
     ->pluck("total", "source_id")->all();
   }

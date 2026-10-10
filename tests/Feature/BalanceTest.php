@@ -41,6 +41,19 @@ it("keeps the balance when a card is paid, moving cash into debt", function () {
   expect(balanceTotals($this, "2026-09-01"))->toBe(["cash" => 650.0, "debt" => 0.0, "total_money" => 650.0]);
 });
 
+it("leaves the card at exactly zero after paying what the bank bills for instalments", function () {
+  // 100.01 / 3 = 33.3367: the bank bills 33.34 a month, so 100.02 for three such purchases.
+  foreach (range(1, 3) as $i) {
+    Expense::factory()->for($this->card)->on("2026-09-20")->instalments(3)->create(["amount" => 100.01]);
+  }
+  Transfer::factory()->between($this->bank, $this->card)->on("2026-09-25")->create(["amount" => 300 + 100.02]);
+
+  $card = collect(balanceData($this, "2026-09-01")["expenses"])->firstWhere("name", "card");
+
+  expect($card["balance"])->toEqual(0)
+    ->and(balanceTotals($this, "2026-09-01")["debt"])->toEqual(0);
+});
+
 it("handles a partial payment and an overpayment", function () {
   $payment = Transfer::factory()->between($this->bank, $this->card)->on("2026-09-20")->create(["amount" => 100]);
 

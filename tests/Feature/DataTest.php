@@ -134,6 +134,18 @@ describe("categories", function () {
       ->and($categories[$cat->id])->not->toHaveKey("expenses");
   });
 
+  it("round each instalment share to cents before adding", function () {
+    $cat = Category::factory()->create();
+    // 100.01 / 3 = 33.3367: billed as 33.34 each, so 100.02 for the three, not 100.01.
+    foreach (range(1, 3) as $i) {
+      Expense::factory()->for($this->none)->on("2026-10-03")->instalments(3)->create(["amount" => 100.01, "category_id" => $cat->id]);
+    }
+
+    $category = collect($this->getJson("/data?date=2026-10-01")->json("categories"))->firstWhere("id", $cat->id);
+
+    expect($category["expenses_sum_amount"])->toEqualWithDelta(100.02, 0.0001);
+  });
+
   it("ignore the expenses of other users", function () {
     $cat = Category::factory()->create();
     Expense::factory()->for($this->none)->on("2026-10-02")->create(["amount" => 10, "category_id" => $cat->id]);
@@ -175,7 +187,7 @@ describe("categories", function () {
       $category = collect($json["categories"])->firstWhere("id", $cat->id);
 
       expect($category["expenses_count"])->toBe($listed->count(), $month)
-        ->and($category["expenses_sum_amount"])->toEqualWithDelta($listed->sum(fn ($e) => $e["amount"] / ($e["instalments"] ?? 1)), 0.001, $month);
+        ->and($category["expenses_sum_amount"])->toEqualWithDelta($listed->sum(fn ($e) => round($e["amount"] / ($e["instalments"] ?? 1), 2)), 0.001, $month);
     }
   });
 });
