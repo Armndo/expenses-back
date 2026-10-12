@@ -120,10 +120,11 @@ it("says what is left of the monthly budget and when it was exceeded", function 
   expect(summaryOf($this, "2026-09-01")["budget_left"])->toEqual(-20);
 });
 
-it("applies the budget to months before the balance start too", function () {
+it("has no budget before the balance start, like the balance", function () {
   Setting::create(["user_id" => $this->user->id, "monthly_budget" => 1000]);
 
-  expect(summaryOf($this, "2026-08-01"))->toMatchArray(["total_money" => null, "budget_left" => 1.0]);
+  expect(summaryOf($this, "2026-08-01"))->toMatchArray(["total_money" => null, "budget" => null, "budget_left" => null])
+    ->and(summaryOf($this, "2026-09-01"))->toMatchArray(["budget" => 1000.0, "budget_left" => 680.0]);
 });
 
 it("leaves the budget left empty while a currency has no rate", function () {

@@ -188,8 +188,9 @@ class Summary
    *   every instalment purchase counted whole from its first period. All `null` before the balance
    *   start, and also when a source's currency has no rate.
    * - `budget`, `budget_left`: the monthly budget and what is left of it after `spent` (negative when it
-   *   was exceeded). Both `null` without a budget, and `budget_left` also when a currency has no rate,
-   *   because `spent` is then incomplete.
+   *   was exceeded). Both `null` without a budget and before the balance start month (like the balance, the
+   *   budget counts from there), and `budget_left` also when a currency has no rate, because `spent` is
+   *   then incomplete.
    * - `missing_rates`: currencies in use without an exchange rate (their sources add nothing to `spent`
    *   and `income`).
    */
@@ -201,7 +202,7 @@ class Summary
       "debt" => null,
       "pending_instalments" => null,
       "total_money" => null,
-      "budget" => $this->budget(),
+      "budget" => Carbon::parse($start)->gte($this->balanceStart()) ? $this->budget() : null,
       "budget_left" => null,
       "missing_rates" => $this->missingRates(),
     ];
