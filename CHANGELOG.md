@@ -1,3 +1,9 @@
+## 0.6.0 (2026-10-11)
+
+### Feat
+
+- **history**: add GET /history with the month by month summary
+
 ## 0.5.0 (2026-10-11)
 
 ### Feat
