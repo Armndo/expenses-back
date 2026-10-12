@@ -7,9 +7,10 @@
 #   composer run deploy -- sta     or pass it (dev, sta, pro)
 #   DRY_RUN=1 composer run deploy  print what would run, change nothing
 #
-# Settings come from .env (git-ignored). SSH_DIR is a template: {env} becomes dev, sta or pro (and {.env}
-# becomes .dev, .sta or nothing in production). Any setting can be overridden for one environment with a
-# prefix (STA_SSH_DIR, PRO_BRANCH, DEV_SSH_HOST, ...).
+# Settings come from the environment or .env (git-ignored), and the environment wins: DEV_BRANCH=my-branch
+# composer run deploy -- dev deploys another branch just once. SSH_DIR is a template: {env} becomes dev, sta
+# or pro (and {.env} becomes .dev, .sta or nothing in production). Any setting can be overridden for one
+# environment with a prefix (STA_SSH_DIR, PRO_BRANCH, DEV_SSH_HOST, ...).
 #
 #   SSH_HOST=...   SSH_USER=...
 #   SSH_DIR=/var/www/expenses.armn.do/{env}/api     (the server's clone of the repo)
@@ -22,8 +23,13 @@ cd "$(dirname "$0")/.."
 
 ENVIRONMENTS="dev sta pro"
 
-# Value of KEY in .env (last one wins, quotes and CR removed), empty when missing.
+# Value of KEY: the environment variable when it is set and not empty, else the one in .env (last one wins,
+# quotes and CR removed), empty when missing.
 read_var() {
+  if [ -n "${!1:-}" ]; then
+    echo "${!1}"
+    return 0
+  fi
   [ -f .env ] || return 0
   { grep -E "^$1=" .env || true; } | tail -1 | cut -d= -f2- | sed -e 's/\r$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/"
 }
