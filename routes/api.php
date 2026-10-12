@@ -4,6 +4,7 @@ use App\Http\Controllers\AppController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\IncomeController;
 use App\Http\Controllers\RateController;
+use App\Http\Controllers\SettingController;
 use App\Http\Controllers\SourceController;
 use App\Http\Controllers\TransferController;
 use App\Http\Controllers\UserController;
@@ -39,4 +40,9 @@ Route::middleware("auth:api")->group(function() {
 
   Route::put("sources/{source_id}", [SourceController::class, "update"]);
   Route::put("rates/{currency}", [RateController::class, "update"]);
+
+  Route::controller(SettingController::class)->group(function() {
+    Route::get("settings", "show");
+    Route::put("settings", "update");
+  });
 });

@@ -61,4 +61,8 @@ class User extends Authenticatable
   public function exchangeRates() {
     return $this->hasMany(ExchangeRate::class);
   }
+
+  public function setting() {
+    return $this->hasOne(Setting::class);
+  }
 }

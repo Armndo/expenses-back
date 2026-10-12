@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Setting;
 use App\Models\User;
 use Laravel\Passport\Passport;
 
@@ -85,6 +86,51 @@ it("moves the start month with the config", function () {
   expect(summaryOf($this, "2026-09-01")["total_money"])->toBeNull()
     ->and(summaryOf($this, "2026-10-01")["total_money"])->toEqual(230)        // 500 - 170 - 100 (the November instalment of the September purchase)
     ->and(summaryOf($this, "2026-11-01")["total_money"])->toEqual(230);        // 230 + 0 - 100 + 100
+});
+
+it("takes the start month from the user's setting before the config", function () {
+  Setting::create(["user_id" => $this->user->id, "balance_start" => "2026-10-01"]);
+
+  expect(summaryOf($this, "2026-09-01")["total_money"])->toBeNull()
+    ->and(summaryOf($this, "2026-10-01")["total_money"])->toEqual(230);
+});
+
+it("falls back to the config when the setting has no start month", function () {
+  Setting::create(["user_id" => $this->user->id, "monthly_budget" => 1000]);
+
+  expect(summaryOf($this, "2026-09-01")["total_money"])->toEqual(1005);
+});
+
+it("has no budget until the user sets one", function () {
+  expect(summaryOf($this, "2026-09-01"))->toMatchArray(["budget" => null, "budget_left" => null]);
+});
+
+it("says what is left of the monthly budget and when it was exceeded", function () {
+  Setting::create(["user_id" => $this->user->id, "monthly_budget" => 400]);
+
+  // Spent 320 in September, 170 in October, 100 in November.
+  expect(summaryOf($this, "2026-09-01"))->toMatchArray(["budget" => 400.0, "budget_left" => 80.0])
+    ->and(summaryOf($this, "2026-10-01"))->toMatchArray(["budget_left" => 230.0])
+    ->and(summaryOf($this, "2026-12-01"))->toMatchArray(["budget_left" => 400.0]);
+
+  Setting::where("user_id", $this->user->id)->update(["monthly_budget" => 320]);
+  expect(summaryOf($this, "2026-09-01")["budget_left"])->toEqual(0);
+
+  Setting::where("user_id", $this->user->id)->update(["monthly_budget" => 300]);
+  expect(summaryOf($this, "2026-09-01")["budget_left"])->toEqual(-20);
+});
+
+it("applies the budget to months before the balance start too", function () {
+  Setting::create(["user_id" => $this->user->id, "monthly_budget" => 1000]);
+
+  expect(summaryOf($this, "2026-08-01"))->toMatchArray(["total_money" => null, "budget_left" => 1.0]);
+});
+
+it("leaves the budget left empty while a currency has no rate", function () {
+  Setting::create(["user_id" => $this->user->id, "monthly_budget" => 400]);
+  $this->user->sources()->create(["name" => "dollars", "currency" => "USD"]);
+
+  expect(summaryOf($this, "2026-09-01"))->toMatchArray(["budget" => 400.0, "budget_left" => null, "missing_rates" => ["USD"]]);
 });
 
 it("leaves the rest of /data as it was", function () {

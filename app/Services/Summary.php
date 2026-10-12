@@ -78,11 +78,18 @@ class Summary
     return ($cents < 0 ? -$share : $share) / 100;
   }
 
-  /** First month counted by the running balance. */
+  /**
+   * First month counted by the running balance: the user's setting, or the config when they have none.
+   */
   public function balanceStart(): Carbon {
     // The fallback covers a stale cached config (config:cache run before config/expenses.php existed),
     // where the key is missing and Carbon would silently parse null as "now".
-    return Carbon::parse(config("expenses.balance_start") ?? "2026-09-01")->startOfMonth();
+    return Carbon::parse($this->user->setting?->balance_start ?? config("expenses.balance_start") ?? "2026-09-01")->startOfMonth();
+  }
+
+  /** Pesos the user wants to spend a month, or null when they set no budget. */
+  public function budget(): ?float {
+    return $this->user->setting?->monthly_budget;
   }
 
   /** Currency every amount is converted to (its rate is always 1). */
@@ -180,6 +187,9 @@ class Summary
    *   will still bill. `total_money = cash - debt - pending_instalments`, the running balance with
    *   every instalment purchase counted whole from its first period. All `null` before the balance
    *   start, and also when a source's currency has no rate.
+   * - `budget`, `budget_left`: the monthly budget and what is left of it after `spent` (negative when it
+   *   was exceeded). Both `null` without a budget, and `budget_left` also when a currency has no rate,
+   *   because `spent` is then incomplete.
    * - `missing_rates`: currencies in use without an exchange rate (their sources add nothing to `spent`
    *   and `income`).
    */
@@ -191,8 +201,14 @@ class Summary
       "debt" => null,
       "pending_instalments" => null,
       "total_money" => null,
+      "budget" => $this->budget(),
+      "budget_left" => null,
       "missing_rates" => $this->missingRates(),
     ];
+
+    if ($totals["budget"] !== null && !$totals["missing_rates"]) {
+      $totals["budget_left"] = round($totals["budget"] - $totals["spent"], 2);
+    }
 
     if (($positions = $this->positions($start)) !== null && !$totals["missing_rates"]) {
       $cards = $this->user->sources()->whereNotNull("cutoff")->pluck("id")->all();
