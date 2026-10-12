@@ -1,3 +1,17 @@
+## 0.5.0 (2026-10-11)
+
+### Feat
+
+- **settings**: carry the budget over between months and add a budget start
+- **settings**: move the balance start to the database and add a monthly budget
+- **scripts**: add copy-db to copy one database over another
+- **deploy**: add a deploy script that asks for the environment
+
+### Fix
+
+- **settings**: count the budget from the balance start month
+- **deploy**: let environment variables override .env
+
 ## 0.4.0 (2026-10-10)
 
 ### Feat
