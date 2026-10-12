@@ -11,6 +11,7 @@ class Setting extends Model
   protected $fillable = [
     "user_id",
     "balance_start",
+    "budget_start",
     "monthly_budget",
   ];
 
@@ -23,6 +24,7 @@ class Setting extends Model
 
   protected $casts = [
     "balance_start" => "date:Y-m-d",
+    "budget_start" => "date:Y-m-d",
     "monthly_budget" => "float",
   ];
 

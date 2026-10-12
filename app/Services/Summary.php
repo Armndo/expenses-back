@@ -26,6 +26,9 @@ class Summary
   /** @var array<string, array<int, float>|null> */
   private array $positions = [];
 
+  /** @var array<string, array<int, float>> month start => spent by source, so each month is queried once */
+  private array $spent = [];
+
   /** @var array<string, float>|null */
   private ?array $rates = null;
 
@@ -90,6 +93,39 @@ class Summary
   /** Pesos the user wants to spend a month, or null when they set no budget. */
   public function budget(): ?float {
     return $this->user->setting?->monthly_budget;
+  }
+
+  /** First month the budget counts from: the user's setting, or the balance start when they have none. */
+  public function budgetStart(): Carbon {
+    $start = $this->user->setting?->budget_start;
+
+    return $start ? Carbon::parse($start)->startOfMonth() : $this->balanceStart();
+  }
+
+  /**
+   * What the budget leaves for the month starting at `$start`, as `[carry, left]`, or `null` without a budget
+   * or before the budget start. The carry is the sum of `budget - spent` of every month since the start up to
+   * the previous one (negative is debt, positive is what was saved, and both pass to the next month), and
+   * `left = budget + carry - spent`. Also `null` while a currency has no rate, because `spent` is incomplete.
+   */
+  private function budgetLeft(string $start): ?array {
+    $budget = $this->budget();
+    $month = Carbon::parse($start);
+    $budgetStart = $this->budgetStart();
+
+    if ($budget === null || $month->lt($budgetStart) || $budgetStart->diffInMonths($month) > 120 || $this->missingRates()) {
+      return null;
+    }
+
+    $carry = 0.0;
+
+    for ($m = $budgetStart->copy(); $m->lt($month); $m->addMonth()) {
+      $carry += $budget - $this->toBase($this->spentBySource($m->format("Y-m-d")));
+    }
+
+    $carry = round($carry, 2);
+
+    return [$carry, round($budget + $carry - $this->toBase($this->spentBySource($start)), 2)];
   }
 
   /** Currency every amount is converted to (its rate is always 1). */
@@ -187,10 +223,11 @@ class Summary
    *   will still bill. `total_money = cash - debt - pending_instalments`, the running balance with
    *   every instalment purchase counted whole from its first period. All `null` before the balance
    *   start, and also when a source's currency has no rate.
-   * - `budget`, `budget_left`: the monthly budget and what is left of it after `spent` (negative when it
-   *   was exceeded). Both `null` without a budget and before the balance start month (like the balance, the
-   *   budget counts from there), and `budget_left` also when a currency has no rate, because `spent` is
-   *   then incomplete.
+   * - `budget`, `budget_carry`, `budget_left`: the monthly budget, what the previous months left over or
+   *     owe (the carry, negative is debt) and what is left of the month, `budget + carry - spent` (negative
+   *     when exceeded). All `null` without a budget and before the budget start month (the balance start
+   *     unless the user sets another one); the carry and what is left also when a currency has no rate,
+   *     because `spent` is then incomplete.
    * - `missing_rates`: currencies in use without an exchange rate (their sources add nothing to `spent`
    *   and `income`).
    */
@@ -202,13 +239,14 @@ class Summary
       "debt" => null,
       "pending_instalments" => null,
       "total_money" => null,
-      "budget" => Carbon::parse($start)->gte($this->balanceStart()) ? $this->budget() : null,
+      "budget" => Carbon::parse($start)->gte($this->budgetStart()) ? $this->budget() : null,
+      "budget_carry" => null,
       "budget_left" => null,
       "missing_rates" => $this->missingRates(),
     ];
 
-    if ($totals["budget"] !== null && !$totals["missing_rates"]) {
-      $totals["budget_left"] = round($totals["budget"] - $totals["spent"], 2);
+    if ($totals["budget"] !== null && ($budget = $this->budgetLeft($start)) !== null) {
+      [$totals["budget_carry"], $totals["budget_left"]] = $budget;
     }
 
     if (($positions = $this->positions($start)) !== null && !$totals["missing_rates"]) {
@@ -252,11 +290,15 @@ class Summary
    * stray cent (the web and the app round the same way).
    */
   private function spentBySource(string $start): array {
+    if (array_key_exists($start, $this->spent)) {
+      return $this->spent[$start];
+    }
+
     $query = Expense::query()
     ->join("sources", "sources.id", "expenses.source_id")
     ->where("sources.user_id", $this->user->id);
 
-    return self::billedIn($query, $start)
+    return $this->spent[$start] = self::billedIn($query, $start)
     ->selectRaw("expenses.source_id as source_id, coalesce(sum(case when expenses.instalments is null then expenses.amount::numeric else round(expenses.amount::numeric / expenses.instalments, 2) end), 0) as total")
     ->groupBy("expenses.source_id")
     ->pluck("total", "source_id")->all();

@@ -17,21 +17,30 @@ class SettingController extends Controller
   }
 
   /**
-   * Sets `balance_start` (a month, `YYYY-MM` or `YYYY-MM-DD`, stored as the first of that month) and/or
-   * `monthly_budget` (pesos >= 0, or null for no budget). Only the keys sent change.
+   * Sets `balance_start` and `budget_start` (a month, `YYYY-MM` or `YYYY-MM-DD`, stored as the first of that
+   * month; the budget one may be null) and/or `monthly_budget` (pesos >= 0, or null for no budget). Only the
+   * keys sent change.
    */
   public function update(Request $request) {
     $user = User::find(Auth::user()->id);
     $data = [];
 
-    if ($request->has("balance_start")) {
-      $start = $request->balance_start;
-
-      if (!is_string($start) || !preg_match('/^(\d{4})-(\d{2})(?:-(\d{2}))?$/', $start, $parts) || !checkdate((int) $parts[2], (int) ($parts[3] ?? 1), (int) $parts[1])) {
-        return response()->json("error", 400);
+    // Both starts take a month (`YYYY-MM` or `YYYY-MM-DD`) and keep the first of it. The budget start may
+    // also be null: the budget then counts from the balance start.
+    foreach (["balance_start" => false, "budget_start" => true] as $key => $nullable) {
+      if (!$request->has($key)) {
+        continue;
       }
 
-      $data["balance_start"] = sprintf("%04d-%02d-01", $parts[1], $parts[2]);
+      $start = $request->input($key);
+
+      if ($start === null && $nullable) {
+        $data[$key] = null;
+      } elseif (is_string($start) && preg_match('/^(\d{4})-(\d{2})(?:-(\d{2}))?$/', $start, $parts) && checkdate((int) $parts[2], (int) ($parts[3] ?? 1), (int) $parts[1])) {
+        $data[$key] = sprintf("%04d-%02d-01", $parts[1], $parts[2]);
+      } else {
+        return response()->json("error", 400);
+      }
     }
 
     if ($request->has("monthly_budget")) {
@@ -58,6 +67,8 @@ class SettingController extends Controller
 
     return [
       "balance_start" => $summary->balanceStart()->format("Y-m-d"),
+      // As saved: null means the budget counts from the balance start.
+      "budget_start" => $user->setting?->budget_start?->format("Y-m-d"),
       "monthly_budget" => $summary->budget(),
     ];
   }
