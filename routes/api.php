@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AppController;
 use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\HistoryController;
 use App\Http\Controllers\IncomeController;
 use App\Http\Controllers\RateController;
 use App\Http\Controllers\SettingController;
@@ -19,6 +20,7 @@ Route::middleware("auth:api")->group(function() {
   });
 
   Route::get("data", AppController::class);
+  Route::get("history", HistoryController::class);
 
   Route::controller(ExpenseController::class)->group(function() {
     Route::post("expenses", "store");

@@ -261,6 +261,45 @@ class Summary
   }
 
   /**
+   * The totals of every month from the first one with something to show up to the current one, oldest first
+   * (each is `totals()` plus its `month`). It starts at the month of the user's first expense, or at the balance
+   * start (and the budget start, when there is a budget) if that is earlier, so `spent` covers every month with
+   * expenses while the rest only has values from the balance start on, as in `totals()`. At most the last 120
+   * months; none when there is nothing yet.
+   */
+  public function history(): array {
+    $first = Expense::query()
+    ->join("sources", "sources.id", "expenses.source_id")
+    ->where("sources.user_id", $this->user->id)
+    ->min("expenses.date");
+
+    $starts = array_filter([
+      $first ? Carbon::parse($first)->startOfMonth() : null,
+      $this->balanceStart(),
+      $this->budget() !== null ? $this->budgetStart() : null,
+    ]);
+
+    $now = Carbon::now()->startOfMonth();
+    $from = collect($starts)->min();
+
+    if ($from->gt($now)) {
+      return [];
+    }
+
+    if ($from->diffInMonths($now) > 119) {
+      $from = $now->copy()->subMonths(119);
+    }
+
+    $months = [];
+
+    for ($m = $from->copy(); $m->lte($now); $m->addMonth()) {
+      $months[] = ["month" => $m->format("Y-m-d")] + $this->totals($m->format("Y-m-d"));
+    }
+
+    return $months;
+  }
+
+  /**
    * What the instalments already started by the period starting at `$start` will still bill after it
    * (id => amount in the source's currency): each one's rounded share times the periods left. The
    * balance subtracts it up front, so a purchase in instalments weighs all at once from its first
