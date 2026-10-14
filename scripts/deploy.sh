@@ -5,17 +5,19 @@
 #
 #   composer run deploy            pick the environment from a menu
 #   composer run deploy -- sta     or pass it (dev, sta, pro)
+#   composer run deploy -- dev my-branch   deploy another branch just once (the default one is not touched)
 #   DRY_RUN=1 composer run deploy  print what would run, change nothing
 #
-# Settings come from the environment or .env (git-ignored), and the environment wins: DEV_BRANCH=my-branch
-# composer run deploy -- dev deploys another branch just once. SSH_DIR is a template: {env} becomes dev, sta
+# Settings come from the environment or .env (git-ignored), and the environment wins. The branch is the
+# second argument, else <ENV>_BRANCH (DEV_BRANCH=my-branch in the environment also works). SSH_DIR is a template: {env} becomes dev, sta
 # or pro (and {.env} becomes .dev, .sta or nothing in production). Any setting can be overridden for one
 # environment with a prefix (STA_SSH_DIR, PRO_BRANCH, DEV_SSH_HOST, ...).
 #
 #   SSH_HOST=...   SSH_USER=...
 #   SSH_DIR=/var/www/expenses.armn.do/{env}/api     (the server's clone of the repo)
 #   PHP_BIN=php   COMPOSER_BIN=composer             (optional, for servers where they are elsewhere)
-#   <ENV>_BRANCH=...                                (optional, defaults: develop, staging, master)
+#   <ENV>_BRANCH=...                                (optional, defaults: develop, staging, master; the
+#                                                   second argument wins over it)
 
 set -eu
 
@@ -106,7 +108,8 @@ SSH_HOST=$(read_var "${PREFIX}_SSH_HOST")
 SSH_USER=$(read_var "${PREFIX}_SSH_USER")
 [ -n "$SSH_USER" ] || SSH_USER=$(read_var SSH_USER)
 SSH_DIR=$(resolve SSH_DIR)
-BRANCH=$(read_var "${PREFIX}_BRANCH")
+BRANCH="${2:-}"
+[ -n "$BRANCH" ] || BRANCH=$(read_var "${PREFIX}_BRANCH")
 if [ -z "$BRANCH" ]; then
   case "$ENV_NAME" in
     dev) BRANCH=develop ;;
