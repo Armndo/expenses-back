@@ -107,6 +107,7 @@ class AppController extends Controller
       "expenses" => $expenses,
       "categories" => $categories,
       "summary" => $summary->totals($start),
+      "range" => $summary->range(),
       // Pesos per unit of every currency with a rate (the base currency, always 1, is left out).
       "rates" => (object) array_diff_key($summary->rates(), [Summary::baseCurrency() => 1]),
     ];

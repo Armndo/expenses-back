@@ -74,11 +74,26 @@ it("starts at the balance start when there is nothing earlier", function () {
   expect(array_column(historyOf($this), "month"))->toBe(["2026-09-01", "2026-10-01", "2026-11-01"]);
 });
 
-it("is empty when everything starts in the future", function () {
+it("has at least the current month, even when everything starts in the future", function () {
   $this->user->sources()->each(fn ($source) => $source->expenses()->delete());
   config(["expenses.balance_start" => "2027-01-01"]);
 
-  expect(historyOf($this))->toBe([]);
+  $months = historyOf($this);
+
+  expect(array_column($months, "month"))->toBe(["2026-11-01"])
+    ->and($months[0]["total_money"])->toBeNull();
+});
+
+it("goes on after the current month while instalments are still to bill, as a projection", function () {
+  // 1200 in 4 instalments of 300 from October: October, November, December and January.
+  $this->user->sources()->where("name", "bank")->first()->expenses()->create(["date" => "2026-10-20", "amount" => 1200, "instalments" => 4]);
+
+  $months = collect(historyOf($this))->keyBy("month");
+
+  expect(array_keys($months->all()))->toBe(["2026-07-01", "2026-08-01", "2026-09-01", "2026-10-01", "2026-11-01", "2026-12-01", "2027-01-01"])
+    // Nothing else bills: December and January spend only the instalment, and what is still to come shrinks.
+    ->and($months["2026-12-01"])->toMatchArray(["spent" => 300.0, "income" => 0.0, "pending_instalments" => 300.0])
+    ->and($months["2027-01-01"])->toMatchArray(["spent" => 300.0, "pending_instalments" => 0.0]);
 });
 
 it("keeps at most the last 120 months", function () {

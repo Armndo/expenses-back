@@ -271,38 +271,60 @@ class Summary
   }
 
   /**
-   * The totals of every month from the first one with something to show up to the current one, oldest first
-   * (each is `totals()` plus its `month`). It starts at the month of the user's first expense, or at the balance
-   * start (and the budget start, when there is a budget) if that is earlier, so `spent` covers every month with
-   * expenses while the rest only has values from the balance start on, as in `totals()`. At most the last 120
-   * months; none when there is nothing yet.
+   * The first and the last month (`Y-m-d` of its first day) the user can look at, as `["first" => ..., "last" => ...]`.
+   * The first is the month of the oldest expense, or the balance start (and the budget start, when there is a budget)
+   * if that is earlier; the last is the month the last expense is billed in, counting the instalments that are still
+   * to come (an expense in 12 instalments reaches 11 months past its first period), and never before the current
+   * month. Months are those of the billing periods of each source, like `billedIn()`. With no expenses it is the
+   * current month for both.
    */
-  public function history(): array {
-    $first = Expense::query()
+  public function range(): array {
+    $effective = "case expenses.next when true then date(expenses.date + interval '1 month') else expenses.date end";
+    $label = "date_trunc('month', ($effective) - coalesce(sources.cutoff, 0) * interval '1 day')";
+
+    $row = Expense::query()
     ->join("sources", "sources.id", "expenses.source_id")
     ->where("sources.user_id", $this->user->id)
-    ->min("expenses.date");
+    ->selectRaw("min($label) as first, max($label + (coalesce(expenses.instalments, 1) - 1) * interval '1 month') as last")
+    ->first();
 
-    $starts = array_filter([
-      $first ? Carbon::parse($first)->startOfMonth() : null,
+    $now = Carbon::now()->startOfMonth();
+
+    $firsts = array_filter([
+      $row?->first ? Carbon::parse($row->first)->startOfMonth() : null,
       $this->balanceStart(),
       $this->budget() !== null ? $this->budgetStart() : null,
     ]);
 
-    $now = Carbon::now()->startOfMonth();
-    $from = collect($starts)->min();
+    $first = collect($firsts)->push($now)->min();
+    $last = collect([$row?->last ? Carbon::parse($row->last)->startOfMonth() : null, $now])->filter()->max();
 
-    if ($from->gt($now)) {
+    return ["first" => $first->format("Y-m-d"), "last" => $last->format("Y-m-d")];
+  }
+
+  /**
+   * The totals of every month of the `range()`, oldest first (each is `totals()` plus its `month`). The months after
+   * the current one are a projection: what the expenses already registered (the instalments to come and the `next`
+   * ones) still bill, with no new income or spending. `spent` covers every month with expenses while the rest only
+   * has values from the balance start on, as in `totals()`. At most 120 months, the last ones; none when the range
+   * starts after it ends.
+   */
+  public function history(): array {
+    $range = $this->range();
+    $from = Carbon::parse($range["first"]);
+    $to = Carbon::parse($range["last"]);
+
+    if ($from->gt($to)) {
       return [];
     }
 
-    if ($from->diffInMonths($now) > 119) {
-      $from = $now->copy()->subMonths(119);
+    if ($from->diffInMonths($to) > 119) {
+      $from = $to->copy()->subMonths(119);
     }
 
     $months = [];
 
-    for ($m = $from->copy(); $m->lte($now); $m->addMonth()) {
+    for ($m = $from->copy(); $m->lte($to); $m->addMonth()) {
       $months[] = ["month" => $m->format("Y-m-d")] + $this->totals($m->format("Y-m-d"));
     }
 

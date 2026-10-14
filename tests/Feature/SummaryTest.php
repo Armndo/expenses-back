@@ -169,7 +169,7 @@ it("leaves the budget left empty while a currency has no rate", function () {
 it("leaves the rest of /data as it was", function () {
   $json = $this->getJson("/data?date=2026-10-01")->assertOk()->json();
 
-  expect(array_keys($json))->toBe(["expenses", "categories", "summary", "rates"])
+  expect(array_keys($json))->toBe(["expenses", "categories", "summary", "range", "rates"])
     ->and(collect($json["expenses"])->pluck("name")->all())->toBe(["bank", "card"]);
 });
 
