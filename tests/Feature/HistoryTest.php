@@ -104,3 +104,50 @@ it("keeps at most the last 120 months", function () {
   expect($months)->toHaveCount(120)
     ->and($months[119]["month"])->toBe("2026-11-01");
 });
+
+it("projects the budget at the recent spending pace on top of what is registered", function () {
+  $user = User::factory()->create();
+  $bank = $user->sources()->create(["name" => "bank"]);
+  Setting::create(["user_id" => $user->id, "balance_start" => "2026-08-01", "monthly_budget" => 1000]);
+  Passport::actingAs($user);
+
+  $bank->expenses()->create(["date" => "2026-08-05", "amount" => 300]);
+  $bank->expenses()->create(["date" => "2026-09-05", "amount" => 500]);
+  $bank->expenses()->create(["date" => "2026-10-05", "amount" => 400]);
+  $bank->expenses()->create(["date" => "2026-10-10", "amount" => 600, "instalments" => 3]); // 200 in October, November and December
+
+  $response = $this->getJson("/history")->assertOk();
+  $months = collect($response->json("months"))->keyBy("month");
+
+  // The pace is what is spent besides the instalments over the last 3 months over: (300 + 500 + 400) / 3.
+  expect($response->json("budget_pace"))->toEqual(400)
+    // The current month (November) is real: 1000 + 1600 carried - 200 of the instalment.
+    ->and($months["2026-11-01"])->toMatchArray(["budget_carry" => 1600.0, "budget_left" => 2400.0])
+    // December is projected: what November left, 1000 - (200 of the instalment + the pace of 400).
+    ->and($months["2026-12-01"])->toMatchArray(["budget" => 1000.0, "budget_carry" => 2400.0, "budget_left" => 2800.0]);
+
+  // /data of a future month keeps what is registered: it does not assume a pace.
+  expect($this->getJson("/data?date=2026-12-01")->json("summary.budget_left"))->toEqual(3200);
+});
+
+it("does not assume any pace when there is no month over to average", function () {
+  $user = User::factory()->create();
+  $bank = $user->sources()->create(["name" => "bank"]);
+  Setting::create(["user_id" => $user->id, "balance_start" => "2026-11-01", "monthly_budget" => 1000]);
+  Passport::actingAs($user);
+
+  $bank->expenses()->create(["date" => "2026-11-05", "amount" => 600, "instalments" => 3]); // 200 in November, December and January
+
+  $response = $this->getJson("/history")->assertOk();
+  $months = collect($response->json("months"))->keyBy("month");
+
+  expect($response->json("budget_pace"))->toEqual(0)
+    ->and($months["2026-12-01"]["budget_left"])->toEqual(1000 + 800 - 200)
+    ->and($months["2027-01-01"]["budget_left"])->toEqual(1000 + 1600 - 200);
+});
+
+it("has no pace without a budget", function () {
+  $response = $this->getJson("/history")->assertOk();
+
+  expect($response->json("budget_pace"))->toBeNull();
+});

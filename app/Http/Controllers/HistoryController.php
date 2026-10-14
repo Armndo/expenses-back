@@ -8,8 +8,16 @@ use Illuminate\Support\Facades\Auth;
 
 class HistoryController extends Controller
 {
-  /** The month by month `summary` since the first expense, up to the current month. */
+  /**
+   * The month by month `summary` over the range of the user (the months after the current one are a projection) and the
+   * spending pace that projection assumes for the budget (`null` without a budget).
+   */
   public function __invoke() {
-    return ["months" => (new Summary(User::find(Auth::user()->id)))->history()];
+    $summary = new Summary(User::find(Auth::user()->id));
+
+    return [
+      "months" => $summary->history(),
+      "budget_pace" => $summary->budget() === null ? null : $summary->spendingPace(),
+    ];
   }
 }

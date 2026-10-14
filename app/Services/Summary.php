@@ -305,9 +305,10 @@ class Summary
   /**
    * The totals of every month of the `range()`, oldest first (each is `totals()` plus its `month`). The months after
    * the current one are a projection: what the expenses already registered (the instalments to come and the `next`
-   * ones) still bill, with no new income or spending. `spent` covers every month with expenses while the rest only
-   * has values from the balance start on, as in `totals()`. At most 120 months, the last ones; none when the range
-   * starts after it ends.
+   * ones) still bill, with no new income. `spent` is only that; the budget (`budget_carry`, `budget_left`) also
+   * assumes the recent spending pace (`spendingPace()`) on top of it each month, and builds on what the current month
+   * leaves. `spent` covers every month with expenses while the rest only has values from the balance start on, as in
+   * `totals()`. At most 120 months, the last ones; none when the range starts after it ends.
    */
   public function history(): array {
     $range = $this->range();
@@ -328,7 +329,82 @@ class Summary
       $months[] = ["month" => $m->format("Y-m-d")] + $this->totals($m->format("Y-m-d"));
     }
 
+    return $this->projectBudget($months);
+  }
+
+  /**
+   * The months of `history()` with the budget of those after the current one projected at the recent pace: each leaves
+   * `budget + carry - (what is registered for it + the pace)`, starting from what the current month leaves. Months
+   * are left as they come when there is no budget or the current month has no `budget_left` (it has not started, or
+   * a currency has no rate).
+   */
+  private function projectBudget(array $months): array {
+    $budget = $this->budget();
+    $now = Carbon::now()->startOfMonth();
+
+    if ($budget === null) {
+      return $months;
+    }
+
+    $pace = $this->spendingPace();
+    $carry = null;
+
+    foreach ($months as $i => $row) {
+      $month = Carbon::parse($row["month"]);
+
+      if ($month->eq($now)) {
+        $carry = $row["budget_left"];
+      } elseif ($month->gt($now) && $carry !== null) {
+        $left = round($budget + $carry - ($this->netSpent($row["month"]) + $pace), 2);
+        $months[$i]["budget"] = $budget;
+        $months[$i]["budget_carry"] = $carry;
+        $months[$i]["budget_left"] = $left;
+        $carry = $left;
+      }
+    }
+
     return $months;
+  }
+
+  /**
+   * What the user spends in a month on top of the instalments: the average, over up to the last 3 months that are over
+   * (the current one is not, and nothing before the first month of the `range()` counts), of the net spent minus the
+   * monthly share of the instalments, in pesos. The instalments are not part of it because the projection already has
+   * them month by month. Zero when there is no month to average or a currency has no rate.
+   */
+  public function spendingPace(): float {
+    $now = Carbon::now()->startOfMonth();
+    $first = Carbon::parse($this->range()["first"]);
+
+    if ($this->missingRates()) {
+      return 0.0;
+    }
+
+    $paces = [];
+
+    for ($m = $now->copy()->subMonths(3); $m->lt($now); $m->addMonth()) {
+      if ($m->lt($first)) {
+        continue;
+      }
+
+      $key = $m->format("Y-m-d");
+      $paces[] = $this->netSpent($key) - $this->toBase($this->instalmentsBilledBySource($key));
+    }
+
+    return $paces ? round(array_sum($paces) / count($paces), 2) : 0.0;
+  }
+
+  /** What the instalments bill in the period starting at `$start` (id => rounded shares in the source's currency). */
+  private function instalmentsBilledBySource(string $start): array {
+    $query = Expense::query()
+    ->join("sources", "sources.id", "expenses.source_id")
+    ->where("sources.user_id", $this->user->id)
+    ->whereNotNull("expenses.instalments");
+
+    return self::billedIn($query, $start)
+    ->selectRaw("expenses.source_id as source_id, coalesce(sum(round(expenses.amount::numeric / expenses.instalments, 2)), 0) as total")
+    ->groupBy("expenses.source_id")
+    ->pluck("total", "source_id")->all();
   }
 
   /**
