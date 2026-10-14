@@ -96,6 +96,18 @@ it("goes on after the current month while instalments are still to bill, as a pr
     ->and($months["2027-01-01"])->toMatchArray(["spent" => 300.0, "pending_instalments" => 0.0]);
 });
 
+it("does not project the budget after the current month", function () {
+  Setting::create(["user_id" => $this->user->id, "monthly_budget" => 400]);
+  $this->user->sources()->where("name", "bank")->first()->expenses()->create(["date" => "2026-10-20", "amount" => 1200, "instalments" => 4]);
+
+  $months = collect(historyOf($this))->keyBy("month");
+
+  // Up to the current month (November) it is there; after it, nothing: with no spending it would only pile up.
+  expect($months["2026-11-01"]["budget_left"])->not->toBeNull()
+    ->and($months["2026-12-01"])->toMatchArray(["budget" => null, "budget_carry" => null, "budget_left" => null])
+    ->and($months["2027-01-01"]["budget_left"])->toBeNull();
+});
+
 it("keeps at most the last 120 months", function () {
   $this->user->sources()->first()->expenses()->create(["date" => "2010-01-05", "amount" => 1]);
 
