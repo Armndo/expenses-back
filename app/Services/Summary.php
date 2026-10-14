@@ -305,9 +305,8 @@ class Summary
   /**
    * The totals of every month of the `range()`, oldest first (each is `totals()` plus its `month`). The months after
    * the current one are a projection: what the expenses already registered (the instalments to come and the `next`
-   * ones) still bill, with no new income or spending. The budget is not projected (`budget`, `budget_carry` and
-   * `budget_left` are `null` after the current month): with no spending it would only pile up. `spent` covers every
-   * month with expenses while the rest only has values from the balance start on, as in `totals()`. At most 120 months, the last ones; none when the range
+   * ones) still bill, with no new income or spending. `spent` covers every month with expenses while the rest only
+   * has values from the balance start on, as in `totals()`. At most 120 months, the last ones; none when the range
    * starts after it ends.
    */
   public function history(): array {
@@ -325,16 +324,8 @@ class Summary
 
     $months = [];
 
-    $now = Carbon::now()->startOfMonth();
-
     for ($m = $from->copy(); $m->lte($to); $m->addMonth()) {
-      $totals = $this->totals($m->format("Y-m-d"));
-
-      if ($m->gt($now)) {
-        $totals["budget"] = $totals["budget_carry"] = $totals["budget_left"] = null;
-      }
-
-      $months[] = ["month" => $m->format("Y-m-d")] + $totals;
+      $months[] = ["month" => $m->format("Y-m-d")] + $this->totals($m->format("Y-m-d"));
     }
 
     return $months;
