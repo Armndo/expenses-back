@@ -367,33 +367,48 @@ class Summary
   }
 
   /**
-   * What the user spends in a month on top of the instalments, according to the budget: the average, over up to the last
-   * 3 months that are over and that the budget was active in (the current one is not over, and nothing before the budget
-   * start counts), of the net spent minus the monthly share of the instalments, in pesos. The instalments are not part
-   * of it because the projection already has them month by month. Only the months of the budget count: before it
-   * started an opening balance or a salary was not meant to give anything back to it. Zero when there is no month to
-   * average (the budget started this month, or has not started) or a currency has no rate.
+   * What the user spends in a month on top of the instalments: the median of the last 3 months that are over (the current
+   * one is not), each one as its spent minus the monthly share of the instalments, in pesos. The instalments are not part
+   * of it because the projection already has them month by month, and the median because one month with a one-off
+   * purchase must not move it.
+   * - With months the budget was active in (from its start on) only those count, with the net spent: it is what the
+   *   budget really took, and what came before it (an opening balance, a salary) was not meant to give anything back.
+   * - Without any yet (the budget started this month, or has not started) it falls back on the last months over that
+   *   have data, with the gross spent, without taking incomes off, so the projection does not assume no spending.
+   * Zero when there is no month at all or a currency has no rate.
    */
   public function spendingPace(): float {
-    $now = Carbon::now()->startOfMonth();
-    $from = $this->budgetStart();
-
     if ($this->missingRates()) {
       return 0.0;
     }
 
-    $paces = [];
+    $now = Carbon::now()->startOfMonth();
+    $budgetStart = $this->budgetStart();
+    $first = Carbon::parse($this->range()["first"]);
+    $over = [];
 
     for ($m = $now->copy()->subMonths(3); $m->lt($now); $m->addMonth()) {
-      if ($m->lt($from)) {
-        continue;
-      }
-
-      $key = $m->format("Y-m-d");
-      $paces[] = $this->netSpent($key) - $this->toBase($this->instalmentsBilledBySource($key));
+      $over[] = $m->copy();
     }
 
-    return $paces ? round(array_sum($paces) / count($paces), 2) : 0.0;
+    $active = array_filter($over, fn (Carbon $m) => $m->gte($budgetStart));
+    $months = $active ?: array_filter($over, fn (Carbon $m) => $m->gte($first));
+
+    $paces = array_map(function (Carbon $m) use ($active) {
+      $key = $m->format("Y-m-d");
+      $spent = $active ? $this->netSpent($key) : $this->toBase($this->spentBySource($key));
+
+      return $spent - $this->toBase($this->instalmentsBilledBySource($key));
+    }, array_values($months));
+
+    if (!$paces) {
+      return 0.0;
+    }
+
+    sort($paces);
+    $middle = intdiv(count($paces), 2);
+
+    return round(count($paces) % 2 ? $paces[$middle] : ($paces[$middle - 1] + $paces[$middle]) / 2, 2);
   }
 
   /** What the instalments bill in the period starting at `$start` (id => rounded shares in the source's currency). */
