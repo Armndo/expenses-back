@@ -1,3 +1,13 @@
+## 0.7.0 (2026-10-13)
+
+### Feat
+
+- **history**: project the budget again after the current month
+- **history**: do not project the budget after the current month
+- **history**: add the month range to /data and project the history up to the last bill
+- **deploy**: take the branch as the second argument
+- **budget**: add the incomes that are not flagged to the monthly budget
+
 ## 0.6.0 (2026-10-11)
 
 ### Feat
