@@ -15,11 +15,12 @@ beforeEach(function () {
   $bank = $this->user->sources()->create(["name" => "bank"]);
   $card = $this->user->sources()->create(["name" => "card", "cutoff" => 15]);
 
-  // Incomes: the opening balance counts as an ordinary income of the start month.
-  $bank->incomes()->create(["date" => "2026-09-01", "amount" => 1000, "description" => "Saldo inicial"]);
-  $bank->incomes()->create(["date" => "2026-09-30", "amount" => 500]);
-  $bank->incomes()->create(["date" => "2026-10-31", "amount" => 500]);
-  $card->incomes()->create(["date" => "2026-10-10", "amount" => 25]); // cutoff 15: September's period
+  // Incomes: the opening balance counts as an ordinary income of the start month. None of them is a refund,
+  // so they skip the budget (the ones that do add to it have their own tests).
+  $bank->incomes()->create(["date" => "2026-09-01", "amount" => 1000, "description" => "Saldo inicial", "skip_budget" => true]);
+  $bank->incomes()->create(["date" => "2026-09-30", "amount" => 500, "skip_budget" => true]);
+  $bank->incomes()->create(["date" => "2026-10-31", "amount" => 500, "skip_budget" => true]);
+  $card->incomes()->create(["date" => "2026-10-10", "amount" => 25, "skip_budget" => true]); // cutoff 15: September's period
 
   // Before the start: shown as previous_spent of September, never subtracted from the balance.
   $bank->expenses()->create(["date" => "2026-08-15", "amount" => 999]);
@@ -170,4 +171,47 @@ it("leaves the rest of /data as it was", function () {
 
   expect(array_keys($json))->toBe(["expenses", "categories", "summary", "rates"])
     ->and(collect($json["expenses"])->pluck("name")->all())->toBe(["bank", "card"]);
+});
+
+it("gives back to the budget an income that is not flagged, without touching spent", function () {
+  Setting::create(["user_id" => $this->user->id, "monthly_budget" => 400]);
+  $this->user->sources()->where("name", "bank")->first()->incomes()->create(["date" => "2026-09-12", "amount" => 100, "description" => "refund"]);
+
+  // September spent 320, so 400 - 320 + 100 left; spent is the same and the income shows in its own total.
+  expect(summaryOf($this, "2026-09-01"))->toMatchArray(["spent" => 320.0, "income" => 1625.0, "budget_left" => 180.0]);
+});
+
+it("ignores the incomes flagged to skip the budget", function () {
+  Setting::create(["user_id" => $this->user->id, "monthly_budget" => 400]);
+  $this->user->sources()->where("name", "bank")->first()->incomes()->create(["date" => "2026-09-12", "amount" => 100, "description" => "salary", "skip_budget" => true]);
+
+  expect(summaryOf($this, "2026-09-01"))->toMatchArray(["income" => 1625.0, "budget_left" => 80.0]);
+});
+
+it("carries an income that gave back to the budget into the next months", function () {
+  Setting::create(["user_id" => $this->user->id, "monthly_budget" => 400]);
+  $this->user->sources()->where("name", "bank")->first()->incomes()->create(["date" => "2026-09-12", "amount" => 100]);
+
+  // September leaves 180 instead of 80, so October is 400 + 180 - 170 and November 400 + 410 - 100.
+  expect(summaryOf($this, "2026-10-01"))->toMatchArray(["budget_carry" => 180.0, "budget_left" => 410.0])
+    ->and(summaryOf($this, "2026-11-01"))->toMatchArray(["budget_carry" => 410.0, "budget_left" => 710.0]);
+});
+
+it("bills a budget income by the cutoff of its source, like the rest", function () {
+  Setting::create(["user_id" => $this->user->id, "monthly_budget" => 400]);
+  $card = $this->user->sources()->where("name", "card")->first();
+  $card->incomes()->create(["date" => "2026-10-15", "amount" => 60]); // last day of September's period
+  $card->incomes()->create(["date" => "2026-10-16", "amount" => 7]);  // first day of October's
+
+  // September: 400 - 320 + 60 = 140. October: 400 + 140 - 170 + 7 = 377.
+  expect(summaryOf($this, "2026-09-01")["budget_left"])->toEqual(140)
+    ->and(summaryOf($this, "2026-10-01")["budget_left"])->toEqual(377);
+});
+
+it("does not count the incomes of other users in the budget", function () {
+  Setting::create(["user_id" => $this->user->id, "monthly_budget" => 400]);
+  $other = User::factory()->create()->sources()->create(["name" => "theirs 2"]);
+  $other->incomes()->create(["date" => "2026-09-12", "amount" => 900]);
+
+  expect(summaryOf($this, "2026-09-01")["budget_left"])->toEqual(80);
 });

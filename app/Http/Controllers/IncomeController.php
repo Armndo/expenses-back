@@ -22,7 +22,7 @@ class IncomeController extends Controller
 
     try {
       $income = $source->incomes()
-      ->create($request->only("date", "amount", "description"));
+      ->create($request->only("date", "amount", "description", "skip_budget"));
     } catch (Exception $e) {
       return response()->json("error", 400);
     }
@@ -52,7 +52,7 @@ class IncomeController extends Controller
     }
 
     try {
-      $income->fill($request->only("date", "amount", "description", "source_id"));
+      $income->fill($request->only("date", "amount", "description", "skip_budget", "source_id"));
       $income->save();
     } catch (Exception $e) {
       return response()->json("error", 400);
@@ -84,7 +84,10 @@ class IncomeController extends Controller
     }
   }
 
-  /** `amount` numeric and not zero, `date` a date; both required on create, only checked when sent on update. */
+  /**
+   * `amount` numeric and not zero, `date` a date; both required on create, only checked when sent on update.
+   * `skip_budget` is optional (false by default) and must be a boolean when sent.
+   */
   private function valid(Request $request, bool $creating): bool {
     if ($creating || $request->has("amount")) {
       if (!is_numeric($request->amount) || (float) $request->amount == 0) {
@@ -96,6 +99,10 @@ class IncomeController extends Controller
       if (!is_string($request->date) || strtotime($request->date) === false) {
         return false;
       }
+    }
+
+    if ($request->has("skip_budget") && filter_var($request->skip_budget, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) === null) {
+      return false;
     }
 
     return true;

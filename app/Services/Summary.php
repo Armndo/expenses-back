@@ -29,6 +29,9 @@ class Summary
   /** @var array<string, array<int, float>> month start => spent by source, so each month is queried once */
   private array $spent = [];
 
+  /** @var array<string, array<int, float>> month start => budget incomes by source, so each month is queried once */
+  private array $budgetIncomes = [];
+
   /** @var array<string, float>|null */
   private ?array $rates = null;
 
@@ -104,9 +107,11 @@ class Summary
 
   /**
    * What the budget leaves for the month starting at `$start`, as `[carry, left]`, or `null` without a budget
-   * or before the budget start. The carry is the sum of `budget - spent` of every month since the start up to
-   * the previous one (negative is debt, positive is what was saved, and both pass to the next month), and
-   * `left = budget + carry - spent`. Also `null` while a currency has no rate, because `spent` is incomplete.
+   * or before the budget start. A month's spent is net of its incomes that are not `skip_budget` (a refund
+   * or a shared payment gives back what it cost; a salary or an opening balance is flagged and does not count).
+   * The carry is the sum of `budget - net spent` of every month since the start up to the previous one
+   * (negative is debt, positive is what was saved, and both pass to the next month), and
+   * `left = budget + carry - net spent`. Also `null` while a currency has no rate, because `spent` is incomplete.
    */
   private function budgetLeft(string $start): ?array {
     $budget = $this->budget();
@@ -120,12 +125,17 @@ class Summary
     $carry = 0.0;
 
     for ($m = $budgetStart->copy(); $m->lt($month); $m->addMonth()) {
-      $carry += $budget - $this->toBase($this->spentBySource($m->format("Y-m-d")));
+      $carry += $budget - $this->netSpent($m->format("Y-m-d"));
     }
 
     $carry = round($carry, 2);
 
-    return [$carry, round($budget + $carry - $this->toBase($this->spentBySource($start)), 2)];
+    return [$carry, round($budget + $carry - $this->netSpent($start), 2)];
+  }
+
+  /** The spent of the period starting at `$start`, in pesos, minus the incomes that count for the budget. */
+  private function netSpent(string $start): float {
+    return $this->toBase($this->spentBySource($start)) - $this->toBase($this->budgetIncomeBySource($start));
   }
 
   /** Currency every amount is converted to (its rate is always 1). */
@@ -349,6 +359,22 @@ class Summary
     ->join("sources", "sources.id", "incomes.source_id")
     ->where("sources.user_id", $this->user->id)
     ->whereRaw("incomes.date between " . self::period($first)[0] . " and " . self::period($last)[1])
+    ->selectRaw("incomes.source_id as source_id, sum(incomes.amount) as total")
+    ->groupBy("incomes.source_id")
+    ->pluck("total", "source_id")->all();
+  }
+
+  /** Incomes of each source in the period starting at `$start` that count for the budget (not `skip_budget`). */
+  private function budgetIncomeBySource(string $start): array {
+    if (array_key_exists($start, $this->budgetIncomes)) {
+      return $this->budgetIncomes[$start];
+    }
+
+    return $this->budgetIncomes[$start] = Income::query()
+    ->join("sources", "sources.id", "incomes.source_id")
+    ->where("sources.user_id", $this->user->id)
+    ->where("incomes.skip_budget", false)
+    ->whereRaw("incomes.date between " . self::period($start)[0] . " and " . self::period($start)[1])
     ->selectRaw("incomes.source_id as source_id, sum(incomes.amount) as total")
     ->groupBy("incomes.source_id")
     ->pluck("total", "source_id")->all();

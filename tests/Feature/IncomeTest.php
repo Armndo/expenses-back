@@ -146,3 +146,34 @@ it("only returns the user's own incomes from /data", function () {
 
   expect($ids)->toBe([$this->mine->id, $this->myOther->id]);
 });
+
+it("does not skip the budget unless the income says so", function () {
+  $this->postJson("/incomes", ["source_id" => $this->mine->id, "date" => "2026-10-05", "amount" => 50])
+    ->assertCreated()
+    ->assertJsonPath("skip_budget", false);
+
+  $this->postJson("/incomes", ["source_id" => $this->mine->id, "date" => "2026-10-05", "amount" => 50, "skip_budget" => true])
+    ->assertCreated()
+    ->assertJsonPath("skip_budget", true);
+});
+
+it("edits skip_budget and keeps it when other fields change", function () {
+  $this->putJson("/incomes/{$this->income->id}", ["skip_budget" => true])->assertOk()->assertJsonPath("skip_budget", true);
+  $this->putJson("/incomes/{$this->income->id}", ["amount" => 120])->assertOk()->assertJsonPath("skip_budget", true);
+  $this->putJson("/incomes/{$this->income->id}", ["skip_budget" => false])->assertOk()->assertJsonPath("skip_budget", false);
+});
+
+it("rejects a skip_budget that is not a boolean", function () {
+  $this->postJson("/incomes", ["source_id" => $this->mine->id, "date" => "2026-10-05", "amount" => 50, "skip_budget" => "maybe"])->assertStatus(400);
+  $this->putJson("/incomes/{$this->income->id}", ["skip_budget" => "maybe"])->assertStatus(400);
+
+  expect($this->income->fresh()->skip_budget)->toBeFalse();
+});
+
+it("returns skip_budget with each income in /data", function () {
+  $this->mine->incomes()->create(["date" => "2026-10-02", "amount" => 5, "skip_budget" => true]);
+
+  $incomes = collect($this->getJson("/data?date=2026-10-01")->json("expenses"))->firstWhere("id", $this->mine->id)["incomes"];
+
+  expect(collect($incomes)->pluck("skip_budget")->sort()->values()->all())->toBe([false, true]);
+});

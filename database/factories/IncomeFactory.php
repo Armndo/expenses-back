@@ -20,6 +20,11 @@ class IncomeFactory extends Factory
         ];
     }
 
+    public function skipBudget(): static
+    {
+        return $this->state(fn () => ['skip_budget' => true]);
+    }
+
     public function on(string $date): static
     {
         return $this->state(fn () => ['date' => $date]);

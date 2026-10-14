@@ -15,6 +15,7 @@ class Income extends Model
     "amount",
     "date",
     "description",
+    "skip_budget",
     "source_id",
   ];
 
@@ -24,8 +25,13 @@ class Income extends Model
     "source_id",
   ];
 
+  protected $attributes = [
+    "skip_budget" => false,
+  ];
+
   protected $casts = [
     "amount" => "float",
+    "skip_budget" => "boolean",
   ];
 
   public $timestamps = true;

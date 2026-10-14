@@ -17,8 +17,8 @@ beforeEach(function () {
   $bank = $this->user->sources()->create(["name" => "bank"]);
   $card = $this->user->sources()->create(["name" => "card", "cutoff" => 15]);
 
-  $bank->incomes()->create(["date" => "2026-09-01", "amount" => 1000]);
-  $bank->incomes()->create(["date" => "2026-10-20", "amount" => 500]);
+  $bank->incomes()->create(["date" => "2026-09-01", "amount" => 1000, "skip_budget" => true]);
+  $bank->incomes()->create(["date" => "2026-10-20", "amount" => 500, "skip_budget" => true]);
 
   $bank->expenses()->create(["date" => "2026-07-10", "amount" => 80]); // before the balance start
   $bank->expenses()->create(["date" => "2026-08-15", "amount" => 999]);
