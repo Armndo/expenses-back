@@ -1,3 +1,14 @@
+## 0.8.0 (2026-10-14)
+
+### Feat
+
+- **history**: take the median of the spending pace and fall back on the gross spent
+- **history**: project the budget at the recent spending pace
+
+### Fix
+
+- **history**: average the spending pace only over the months the budget was active in
+
 ## 0.7.0 (2026-10-13)
 
 ### Feat
