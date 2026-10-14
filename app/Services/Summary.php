@@ -367,14 +367,16 @@ class Summary
   }
 
   /**
-   * What the user spends in a month on top of the instalments: the average, over up to the last 3 months that are over
-   * (the current one is not, and nothing before the first month of the `range()` counts), of the net spent minus the
-   * monthly share of the instalments, in pesos. The instalments are not part of it because the projection already has
-   * them month by month. Zero when there is no month to average or a currency has no rate.
+   * What the user spends in a month on top of the instalments, according to the budget: the average, over up to the last
+   * 3 months that are over and that the budget was active in (the current one is not over, and nothing before the budget
+   * start counts), of the net spent minus the monthly share of the instalments, in pesos. The instalments are not part
+   * of it because the projection already has them month by month. Only the months of the budget count: before it
+   * started an opening balance or a salary was not meant to give anything back to it. Zero when there is no month to
+   * average (the budget started this month, or has not started) or a currency has no rate.
    */
   public function spendingPace(): float {
     $now = Carbon::now()->startOfMonth();
-    $first = Carbon::parse($this->range()["first"]);
+    $from = $this->budgetStart();
 
     if ($this->missingRates()) {
       return 0.0;
@@ -383,7 +385,7 @@ class Summary
     $paces = [];
 
     for ($m = $now->copy()->subMonths(3); $m->lt($now); $m->addMonth()) {
-      if ($m->lt($first)) {
+      if ($m->lt($from)) {
         continue;
       }
 

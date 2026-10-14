@@ -130,6 +130,22 @@ it("projects the budget at the recent spending pace on top of what is registered
   expect($this->getJson("/data?date=2026-12-01")->json("summary.budget_left"))->toEqual(3200);
 });
 
+it("only averages the months the budget was active in", function () {
+  $user = User::factory()->create();
+  $bank = $user->sources()->create(["name" => "bank"]);
+  Setting::create(["user_id" => $user->id, "balance_start" => "2026-08-01", "budget_start" => "2026-10-01", "monthly_budget" => 1000]);
+  Passport::actingAs($user);
+
+  $bank->expenses()->create(["date" => "2026-08-05", "amount" => 300]);
+  $bank->expenses()->create(["date" => "2026-09-05", "amount" => 500]);
+  $bank->expenses()->create(["date" => "2026-10-05", "amount" => 400]);
+  // An opening balance before the budget started, as the real data has: it does not bend the pace.
+  $bank->incomes()->create(["date" => "2026-09-01", "amount" => 50000, "description" => "saldo inicial"]);
+
+  // Now is November: only October is a month over that the budget was active in.
+  expect($this->getJson("/history")->assertOk()->json("budget_pace"))->toEqual(400);
+});
+
 it("does not assume any pace when there is no month over to average", function () {
   $user = User::factory()->create();
   $bank = $user->sources()->create(["name" => "bank"]);
