@@ -177,3 +177,21 @@ it("returns skip_budget with each income in /data", function () {
 
   expect(collect($incomes)->pluck("skip_budget")->sort()->values()->all())->toBe([false, true]);
 });
+
+it("refuses a new income in a disabled source", function () {
+  $this->mine->forceFill(["disabled" => true])->save();
+
+  $this->postJson("/incomes", ["source_id" => $this->mine->id, "date" => "2026-10-05", "amount" => 50])->assertStatus(400);
+
+  expect($this->mine->incomes()->count())->toBe(1);
+});
+
+it("lets an old income in a disabled source keep being edited, but not move to one", function () {
+  $this->mine->forceFill(["disabled" => true])->save();
+  $this->myOther->forceFill(["disabled" => true])->save();
+
+  $this->putJson("/incomes/{$this->income->id}", ["amount" => 150, "source_id" => $this->mine->id])->assertOk();
+  $this->putJson("/incomes/{$this->income->id}", ["source_id" => $this->myOther->id])->assertStatus(400);
+
+  expect($this->income->fresh()->source_id)->toBe($this->mine->id);
+});

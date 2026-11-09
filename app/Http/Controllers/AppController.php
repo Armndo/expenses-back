@@ -50,6 +50,8 @@ class AppController extends Controller
         // Correlated subquery: `sources` is the outer table, no join needed.
         $query->whereRaw("incomes.date between $periodStart and $periodEnd")
     ])
+    // Whether the source has any movement at all (not only this month's): the clients lock the kind of a source that has some.
+    ->withExists(["expenses as has_expenses", "incomes as has_incomes", "outgoingTransfers as has_outgoing", "incomingTransfers as has_incoming"])
     ->orderBy("sources.id")
     ->get();
 
@@ -68,6 +70,8 @@ class AppController extends Controller
         ->sortBy([["date", "desc"], ["id", "desc"]])->values();
       $arr = $source->toArray();
       unset($arr["outgoing_transfers"], $arr["incoming_transfers"]);
+      $arr["has_movements"] = $source->has_expenses || $source->has_incomes || $source->has_outgoing || $source->has_incoming;
+      unset($arr["has_expenses"], $arr["has_incomes"], $arr["has_outgoing"], $arr["has_incoming"]);
       $arr["expenses"] = $regular->values()->toArray();
       $arr["expenses_count"] = $regular->count();
       $arr["instalments"] = $instalments->values()->toArray();
@@ -80,7 +84,8 @@ class AppController extends Controller
       return $arr;
     })->toArray();
 
-    $categories = Category::orderBy("order")
+    $categories = $user->categories()
+    ->orderBy("order")
     ->orderBy("name")
     ->with([
       "expenses" => fn(HasMany $query) =>

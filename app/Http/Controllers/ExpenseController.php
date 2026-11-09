@@ -16,7 +16,8 @@ class ExpenseController extends Controller
     ->where("id", $request->source_id)
     ->first();
 
-    if (!$source) {
+    // A disabled source takes no new movements, and the category must be the user's and not disabled.
+    if (!$source || $source->disabled || !$this->categoryAllowed($user, $request->category_id, null)) {
       return response()->json("error", 400);
     }
 
@@ -46,8 +47,17 @@ class ExpenseController extends Controller
       return response()->json("error", 400);
     }
 
-    // Moving the expense: the target source must also belong to the user.
-    if ($request->has("source_id") && !$user->sources()->where("id", $request->source_id)->exists()) {
+    // Moving the expense: the target source must also belong to the user, and not be disabled unless it is where it already is.
+    if ($request->has("source_id")) {
+      $target = $user->sources()->find($request->source_id);
+
+      if (!$target || ($target->disabled && $target->id !== $expense->source_id)) {
+        return response()->json("error", 400);
+      }
+    }
+
+    // Changing the category: one of the user's that is not disabled (editing the amount of an old expense is always fine).
+    if ($request->has("category_id") && !$this->categoryAllowed($user, $request->category_id, $expense->category_id)) {
       return response()->json("error", 400);
     }
 
@@ -59,6 +69,15 @@ class ExpenseController extends Controller
     }
 
     return $expense;
+  }
+
+  /** No category (`null`), the one the expense already has, or one of the user's that is not disabled. */
+  private function categoryAllowed(User $user, mixed $id, mixed $current): bool {
+    if ($id === null || $id == $current) {
+      return true;
+    }
+
+    return $user->categories()->where("id", $id)->where("disabled", false)->exists();
   }
 
   public function destroy($expense_id) {

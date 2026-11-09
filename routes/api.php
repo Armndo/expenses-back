@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AppController;
+use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\HistoryController;
 use App\Http\Controllers\IncomeController;
@@ -40,7 +41,14 @@ Route::middleware("auth:api")->group(function() {
     Route::delete("transfers/{transfer_id}", "destroy");
   });
 
-  Route::put("sources/{source_id}", [SourceController::class, "update"]);
+  Route::controller(SourceController::class)->group(function() {
+    Route::post("sources", "store");
+    Route::put("sources/{source_id}", "update");
+  });
+  Route::controller(CategoryController::class)->group(function() {
+    Route::post("categories", "store");
+    Route::put("categories/{category_id}", "update");
+  });
   Route::put("rates/{currency}", [RateController::class, "update"]);
 
   Route::controller(SettingController::class)->group(function() {

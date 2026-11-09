@@ -118,8 +118,8 @@ describe("instalments", function () {
 
 describe("categories", function () {
   it("sum their expenses, each instalment contributing its monthly share", function () {
-    $cat = Category::factory()->create();
-    $empty = Category::factory()->create();
+    $cat = Category::factory()->for($this->user)->create();
+    $empty = Category::factory()->for($this->user)->create();
     Expense::factory()->for($this->none)->on("2026-10-02")->create(["amount" => 10, "category_id" => $cat->id]);
     Expense::factory()->for($this->c15)->on("2026-10-20")->create(["amount" => 20, "category_id" => $cat->id]);
     Expense::factory()->for($this->none)->on("2026-10-03")->instalments(3)->create(["amount" => 90, "category_id" => $cat->id]);
@@ -136,7 +136,7 @@ describe("categories", function () {
   });
 
   it("round each instalment share to cents before adding", function () {
-    $cat = Category::factory()->create();
+    $cat = Category::factory()->for($this->user)->create();
     // 100.01 / 3 = 33.3367: billed as 33.34 each, so 100.02 for the three, not 100.01.
     foreach (range(1, 3) as $i) {
       Expense::factory()->for($this->none)->on("2026-10-03")->instalments(3)->create(["amount" => 100.01, "category_id" => $cat->id]);
@@ -148,7 +148,7 @@ describe("categories", function () {
   });
 
   it("ignore the expenses of other users", function () {
-    $cat = Category::factory()->create();
+    $cat = Category::factory()->for($this->user)->create();
     Expense::factory()->for($this->none)->on("2026-10-02")->create(["amount" => 10, "category_id" => $cat->id]);
     Expense::factory()->for(Source::factory())->on("2026-10-02")->create(["amount" => 777, "category_id" => $cat->id]);
 
@@ -159,9 +159,9 @@ describe("categories", function () {
   });
 
   it("are ordered by order, then name", function () {
-    $b = Category::factory()->create(["name" => "bbb", "order" => 2]);
-    $a2 = Category::factory()->create(["name" => "aaa", "order" => 2]);
-    $first = Category::factory()->create(["name" => "zzz", "order" => 1]);
+    $b = Category::factory()->for($this->user)->create(["name" => "bbb", "order" => 2]);
+    $a2 = Category::factory()->for($this->user)->create(["name" => "aaa", "order" => 2]);
+    $first = Category::factory()->for($this->user)->create(["name" => "zzz", "order" => 1]);
 
     $ids = collect($this->getJson("/data")->json("categories"))->pluck("id");
     $mine = $ids->filter(fn ($id) => in_array($id, [$b->id, $a2->id, $first->id]))->values()->all();
@@ -170,7 +170,7 @@ describe("categories", function () {
   });
 
   it("agree with the sources' own lists for every period", function () {
-    $cat = Category::factory()->create();
+    $cat = Category::factory()->for($this->user)->create();
     $sources = [$this->none, $this->zero, $this->c15];
     $dates = ["2026-08-31", "2026-09-01", "2026-09-15", "2026-09-16", "2026-10-14", "2026-10-15", "2026-10-31", "2026-11-01"];
 

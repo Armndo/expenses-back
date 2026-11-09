@@ -56,7 +56,7 @@ it("leaves the card at exactly zero after paying what the bank bills for instalm
 
 it("rounds an exact half cent the same in the balance and in the category sums", function () {
   // 14405.58 / 12 = 1200.465 exactly: halves round away from zero, to 1200.47, everywhere.
-  $category = App\Models\Category::factory()->create();
+  $category = App\Models\Category::factory()->for($this->user)->create();
   Expense::factory()->for($this->card)->on("2026-09-20")->instalments(12)->create(["amount" => 14405.58, "category_id" => $category->id]);
 
   $data = balanceData($this, "2026-09-01");
@@ -179,4 +179,16 @@ it("has no previous balance in the start month or before it", function () {
 
   expect($card("2026-09-01")["previous_balance"])->toBeNull()
     ->and($card("2026-08-01")["previous_balance"])->toBeNull();
+});
+
+it("keeps counting the money of a disabled source: its debt, its balance and its instalments", function () {
+  Expense::factory()->for($this->card)->on("2026-09-21")->instalments(3)->create(["amount" => 300]);
+
+  $before = balanceTotals($this, "2026-10-01");
+
+  $this->card->forceFill(["disabled" => true])->save();
+  $this->bank->forceFill(["disabled" => true])->save();
+
+  expect(balanceTotals($this, "2026-10-01"))->toBe($before)
+    ->and($before["debt"])->toBeGreaterThan(0);
 });

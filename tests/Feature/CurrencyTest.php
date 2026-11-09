@@ -53,7 +53,7 @@ it("converts what is spent and earned in a month", function () {
 
 it("converts the category sums with the rate of the source", function () {
   rate($this, 17.5);
-  $category = Category::factory()->create();
+  $category = Category::factory()->for($this->user)->create();
   $this->dollar->expenses()->create(["date" => "2026-10-03", "amount" => 10, "category_id" => $category->id]);
   $this->dollar->expenses()->create(["date" => "2026-10-04", "amount" => 30, "instalments" => 3, "category_id" => $category->id]);
   $this->bank->expenses()->create(["date" => "2026-10-05", "amount" => 100, "category_id" => $category->id]);

@@ -16,7 +16,8 @@ class IncomeController extends Controller
     ->where("id", $request->source_id)
     ->first();
 
-    if (!$source || !$this->valid($request, true)) {
+    // A disabled source takes no new movements.
+    if (!$source || $source->disabled || !$this->valid($request, true)) {
       return response()->json("error", 400);
     }
 
@@ -46,9 +47,13 @@ class IncomeController extends Controller
       return response()->json("error", 400);
     }
 
-    // Moving the income: the target source must also belong to the user.
-    if ($request->has("source_id") && !$user->sources()->where("id", $request->source_id)->exists()) {
-      return response()->json("error", 400);
+    // Moving the income: the target source must also belong to the user, and not be disabled unless it is where it already is.
+    if ($request->has("source_id")) {
+      $target = $user->sources()->find($request->source_id);
+
+      if (!$target || ($target->disabled && $target->id !== $income->source_id)) {
+        return response()->json("error", 400);
+      }
     }
 
     try {

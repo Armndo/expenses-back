@@ -78,6 +78,11 @@ class TransferController extends Controller
       return false;
     }
 
+    // A disabled source takes no new movements: it cannot be an end of a new transfer, nor be chosen as a new end of one.
+    if ($user->sources()->whereIn("id", [$from, $to])->where("disabled", true)->get()->contains(fn($source) => !$current || !in_array($source->id, [$current->from_source_id, $current->to_source_id]))) {
+      return false;
+    }
+
     if (!$current || $request->has("amount")) {
       if (!is_numeric($request->amount) || (float) $request->amount <= 0) {
         return false;

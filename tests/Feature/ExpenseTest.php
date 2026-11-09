@@ -11,7 +11,7 @@ beforeEach(function () {
   $this->mine = Source::factory()->for($this->user)->create(["name" => "mine"]);
   $this->myOther = Source::factory()->for($this->user)->create(["name" => "mine 2"]);
   $this->theirs = Source::factory()->create(["name" => "theirs"]);
-  $this->category = Category::factory()->create();
+  $this->category = Category::factory()->for($this->user)->create();
   $this->expense = Expense::factory()->for($this->mine)->on("2026-10-01")->create(["amount" => 10]);
 
   Passport::actingAs($this->user);
@@ -100,4 +100,56 @@ it("refuses to update or delete a missing or foreign expense", function () {
   $this->deleteJson("/expenses/{$foreign->id}")->assertStatus(400);
 
   expect($foreign->fresh()->amount)->toBe(5.0);
+});
+
+it("refuses a new expense in a disabled source", function () {
+  $this->mine->forceFill(["disabled" => true])->save();
+
+  $this->postJson("/expenses", ["source_id" => $this->mine->id, "date" => "2026-10-05", "amount" => 5])->assertStatus(400);
+
+  expect($this->mine->expenses()->count())->toBe(1);
+});
+
+it("refuses a new expense with a disabled category, another user's or a missing one", function (string $which) {
+  $category = match ($which) {
+    "disabled" => tap(Category::factory()->for($this->user)->create(), fn ($c) => $c->forceFill(["disabled" => true])->save()),
+    "theirs" => Category::factory()->create(),
+    "missing" => (object) ["id" => 999999],
+  };
+
+  $this->postJson("/expenses", ["source_id" => $this->mine->id, "date" => "2026-10-05", "amount" => 5, "category_id" => $category->id])->assertStatus(400);
+
+  expect($this->mine->expenses()->count())->toBe(1);
+})->with(["disabled", "theirs", "missing"]);
+
+it("allows a new expense without a category", function () {
+  $this->postJson("/expenses", ["source_id" => $this->mine->id, "date" => "2026-10-05", "amount" => 5, "category_id" => null])->assertCreated();
+});
+
+it("lets an old expense in a disabled source or with a disabled category keep being edited", function () {
+  $this->expense->forceFill(["category_id" => $this->category->id])->save();
+  $this->mine->forceFill(["disabled" => true])->save();
+  $this->category->forceFill(["disabled" => true])->save();
+
+  $this->putJson("/expenses/{$this->expense->id}", ["amount" => 77, "description" => "fixed", "source_id" => $this->mine->id, "category_id" => $this->category->id])->assertOk();
+  $this->deleteJson("/expenses/{$this->expense->id}")->assertOk();
+
+  expect(Expense::find($this->expense->id))->toBeNull();
+});
+
+it("refuses to move an expense to a disabled source or to a disabled category", function () {
+  $this->myOther->forceFill(["disabled" => true])->save();
+  $disabled = Category::factory()->for($this->user)->create();
+  $disabled->forceFill(["disabled" => true])->save();
+
+  $this->putJson("/expenses/{$this->expense->id}", ["source_id" => $this->myOther->id])->assertStatus(400);
+  $this->putJson("/expenses/{$this->expense->id}", ["category_id" => $disabled->id])->assertStatus(400);
+
+  $expense = $this->expense->fresh();
+
+  expect([$expense->source_id, $expense->category_id])->toBe([$this->mine->id, null]);
+});
+
+it("refuses to change the category of an expense to another user's", function () {
+  $this->putJson("/expenses/{$this->expense->id}", ["category_id" => Category::factory()->create()->id])->assertStatus(400);
 });

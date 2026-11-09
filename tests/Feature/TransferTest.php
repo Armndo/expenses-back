@@ -158,3 +158,22 @@ it("keeps the received amount of a conversion when only other fields change", fu
 
   expect($this->transfer->fresh()->received_amount)->toBe(5.6);
 });
+
+it("refuses a new transfer with a disabled end", function (string $end) {
+  $this->{$end}->forceFill(["disabled" => true])->save();
+
+  $this->postJson("/transfers", transferBody($this))->assertStatus(400);
+
+  expect(Transfer::count())->toBe(1);
+})->with(["bank", "card"]);
+
+it("lets an old transfer between disabled sources keep being edited, but not move an end to one", function () {
+  $this->bank->forceFill(["disabled" => true])->save();
+  $this->card->forceFill(["disabled" => true])->save();
+  $this->bank2->forceFill(["disabled" => true])->save();
+
+  $this->putJson("/transfers/{$this->transfer->id}", ["amount" => 300, "date" => "2026-10-02"])->assertOk();
+  $this->putJson("/transfers/{$this->transfer->id}", ["from_source_id" => $this->bank2->id])->assertStatus(400);
+
+  expect($this->transfer->fresh()->from_source_id)->toBe($this->bank->id);
+});

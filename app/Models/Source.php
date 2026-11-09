@@ -27,6 +27,10 @@ class Source extends Model
     "kind",
   ];
 
+  protected $casts = [
+    "disabled" => "boolean",
+  ];
+
   public function user() {
     return $this->belongsTo(User::class);
   }
@@ -50,6 +54,11 @@ class Source extends Model
   /** A source with a cutoff (even 0) is a credit card; without one it is a debit account. */
   public function isCard(): bool {
     return $this->cutoff !== null;
+  }
+
+  /** Whether any expense, income or transfer (either end) points at this source. */
+  public function hasMovements(): bool {
+    return $this->expenses()->exists() || $this->incomes()->exists() || $this->outgoingTransfers()->exists() || $this->incomingTransfers()->exists();
   }
 
   public function getKindAttribute(): string {

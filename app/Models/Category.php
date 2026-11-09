@@ -20,9 +20,18 @@ class Category extends Model
   ];
 
   protected $hidden = [
+    "user_id",
     "created_at",
     "updated_at",
   ];
+
+  protected $casts = [
+    "disabled" => "boolean",
+  ];
+
+  public function user() {
+    return $this->belongsTo(User::class);
+  }
 
   public function expenses(): HasMany {
     return $this->hasMany(Expense::class);
