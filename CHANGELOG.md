@@ -1,3 +1,9 @@
+## 0.11.0 (2026-11-09)
+
+### Feat
+
+- **deps**: update to Laravel 13 and Passport 13
+
 ## 0.10.0 (2026-11-09)
 
 ### Feat
