@@ -1,3 +1,10 @@
+## 0.9.0 (2026-11-09)
+
+### Feat
+
+- **deploy**: deploy the current branch with -c
+- **sources**: create, edit and disable sources and categories
+
 ## 0.8.0 (2026-10-14)
 
 ### Feat
