@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Laravel\Passport\Token;
 
 beforeEach(function () {
@@ -69,4 +70,16 @@ it("logout revokes only the current token", function () {
   $this->withToken($android)->getJson("/info")->assertUnauthorized();
   $this->app["auth"]->forgetGuards();
   $this->withToken($web)->getJson("/info")->assertOk();
+});
+
+it("lets in a user whose id is the id of the personal access client", function () {
+  // Passport 13 rejects a token when the user id is the id of a client that has the client_credentials grant, and the
+  // owner (user 1) and the personal access client (client 1) have the same id: the client must only have personal_access.
+  $client = DB::table("oauth_clients")->where("grant_types", "like", "%personal_access%")->first();
+  $user = User::factory()->create(["id" => (int) $client->id + 1000]);
+  DB::table("oauth_clients")->where("id", $client->id)->update(["id" => $user->id]);
+  DB::table("oauth_access_tokens")->where("client_id", $client->id)->update(["client_id" => $user->id]);
+  $this->user = $user;
+
+  $this->withHeader("Authorization", "Bearer " . loginAs($this))->getJson("/info")->assertOk();
 });

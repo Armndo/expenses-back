@@ -30,7 +30,7 @@ abstract class TestCase extends BaseTestCase
     /** Logging in issues a Passport personal access token, which needs a personal access client. */
     protected function ensurePersonalAccessClient(): void
     {
-        if (! DB::table('oauth_clients')->where('personal_access_client', true)->exists()) {
+        if (! DB::table('oauth_clients')->where('grant_types', 'like', '%personal_access%')->exists()) {
             Artisan::call('passport:client', ['--personal' => true, '--name' => 'tests', '--no-interaction' => true]);
         }
     }

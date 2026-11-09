@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Laravel 11 REST API for personal expense tracking. PHP 8.2+, PostgreSQL, Laravel Passport OAuth authentication.
+Laravel 13 REST API for personal expense tracking. PHP 8.3+, PostgreSQL, Laravel Passport 13 OAuth authentication.
 
 ## Commands
 
@@ -22,6 +22,8 @@ Laravel 11 REST API for personal expense tracking. PHP 8.2+, PostgreSQL, Laravel
 ## Architecture
 
 API-only application — all routes defined in `routes/api.php`, no web UI logic.
+
+**Passport 13**: the clients keep their **integer ids** (`Passport::$clientUuids = false` in `AppServiceProvider`): the tokens already issued are bound to the id of their client, and changing it would invalidate all of them. `User` implements `OAuthenticatable`. The migration `update_oauth_clients_table_for_passport_13` moves `oauth_clients` to the new structure (`owner_*`, `redirect_uris`, `grant_types`) and writes the grants on purpose: the personal access client only has `personal_access` and the password one `password` and `refresh_token`, because Passport rejects a token when the user id is the id of a client that has `client_credentials` (the user 1 and the client 1 would be locked out; `AuthTokenTest` covers it). `oauth_personal_access_clients` is not read any more and is left in place. Tests create the personal access client with `passport:client --personal` when it is missing.
 
 **Auth tokens**: `POST /login` takes an optional `device` (`android` → 90-day token, anything else → `web`, 1 day) and names the token after it. `POST /logout` revokes only the current token.
 

@@ -21,6 +21,9 @@ class AppServiceProvider extends ServiceProvider
   */
   public function boot(): void
   {
+    // Keep the integer ids of the OAuth clients: the tokens already issued are bound to the id of their client, and
+    // changing it would invalidate all of them.
+    Passport::$clientUuids = false;
     Passport::personalAccessTokensExpireIn(Carbon::now()->addDay());
   }
 }
