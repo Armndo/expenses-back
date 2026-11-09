@@ -6,10 +6,11 @@
 #   composer run deploy            pick the environment from a menu
 #   composer run deploy -- sta     or pass it (dev, sta, pro)
 #   composer run deploy -- dev my-branch   deploy another branch just once (the default one is not touched)
+#   composer run deploy -- dev -c          deploy the branch checked out here (-c or --current), no typing it
 #   DRY_RUN=1 composer run deploy  print what would run, change nothing
 #
 # Settings come from the environment or .env (git-ignored), and the environment wins. The branch is the
-# second argument, else <ENV>_BRANCH (DEV_BRANCH=my-branch in the environment also works). SSH_DIR is a template: {env} becomes dev, sta
+# second argument (or -c for the current one), else <ENV>_BRANCH (DEV_BRANCH=my-branch in the environment also works). SSH_DIR is a template: {env} becomes dev, sta
 # or pro (and {.env} becomes .dev, .sta or nothing in production). Any setting can be overridden for one
 # environment with a prefix (STA_SSH_DIR, PRO_BRANCH, DEV_SSH_HOST, ...).
 #
@@ -77,6 +78,18 @@ ask() {
   esac
 }
 
+# -c / --current deploys the branch checked out here; the other arguments are the environment and a branch.
+CURRENT=0
+ARGS=()
+for arg in "$@"; do
+  case "$arg" in
+    -c|--current) CURRENT=1 ;;
+    -*) echo "Unknown option '$arg', use -c or --current."; exit 1 ;;
+    *) ARGS+=("$arg") ;;
+  esac
+done
+set -- ${ARGS[@]+"${ARGS[@]}"}
+
 ENV_NAME=$(echo "${1:-}" | tr '[:upper:]' '[:lower:]')
 
 if [ -z "$ENV_NAME" ]; then
@@ -109,6 +122,11 @@ SSH_USER=$(read_var "${PREFIX}_SSH_USER")
 [ -n "$SSH_USER" ] || SSH_USER=$(read_var SSH_USER)
 SSH_DIR=$(resolve SSH_DIR)
 BRANCH="${2:-}"
+if [ "$CURRENT" = "1" ]; then
+  [ -z "$BRANCH" ] || { echo "Use a branch name or -c, not both."; exit 1; }
+  BRANCH=$(git branch --show-current)
+  [ -n "$BRANCH" ] || { echo "No branch is checked out (detached HEAD), pass its name."; exit 1; }
+fi
 [ -n "$BRANCH" ] || BRANCH=$(read_var "${PREFIX}_BRANCH")
 if [ -z "$BRANCH" ]; then
   case "$ENV_NAME" in
