@@ -40,6 +40,7 @@
     },
     "scripts": {
         "deploy": "bash scripts/deploy.sh",
+        "backup-db": "bash scripts/backup-db.sh",
         "copy-db": [
             "Composer\\Config::disableProcessTimeout",
             "bash scripts/copy-db.sh"
