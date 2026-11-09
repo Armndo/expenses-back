@@ -1,3 +1,13 @@
+## 0.10.0 (2026-11-09)
+
+### Feat
+
+- **backup**: back up a database with composer run backup-db
+
+### Fix
+
+- **deps**: update the composer dependencies with security advisories
+
 ## 0.9.0 (2026-11-09)
 
 ### Feat
