@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Transfer;
+use App\Services\Summary;
 use App\Models\User;
 use Exception;
 use Illuminate\Http\Request;
@@ -23,7 +24,7 @@ class TransferController extends Controller
       return response()->json("error", 400);
     }
 
-    return $transfer;
+    return $this->withPeriod($transfer);
   }
 
   public function update(Request $request, $transfer_id) {
@@ -40,6 +41,13 @@ class TransferController extends Controller
     } catch (Exception $e) {
       return response()->json("error", 400);
     }
+
+    return $this->withPeriod($transfer);
+  }
+
+  /** The transfer plus the month it counts in (`period`, `YYYY-MM`): the calendar month of its date, with no cutoff. */
+  private function withPeriod(Transfer $transfer): Transfer {
+    $transfer->setAttribute("period", Summary::transferPeriod($transfer->date));
 
     return $transfer;
   }

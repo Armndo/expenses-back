@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Income;
+use App\Models\Source;
+use App\Services\Summary;
 use App\Models\User;
 use Exception;
 use Illuminate\Http\Request;
@@ -28,7 +30,7 @@ class IncomeController extends Controller
       return response()->json("error", 400);
     }
 
-    return $income;
+    return $this->withPeriod($income, $source);
   }
 
   public function update(Request $request, $income_id) {
@@ -62,6 +64,13 @@ class IncomeController extends Controller
     } catch (Exception $e) {
       return response()->json("error", 400);
     }
+
+    return $this->withPeriod($income, Source::find($income->source_id));
+  }
+
+  /** The income plus the billing month it falls in (`period`, `YYYY-MM`), by the cutoff of its source, like an expense. */
+  private function withPeriod(Income $income, Source $source): Income {
+    $income->setAttribute("period", Summary::periodOf($source->cutoff, $income->date));
 
     return $income;
   }

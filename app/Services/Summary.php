@@ -73,6 +73,38 @@ class Summary
   }
 
   /**
+   * The billing month (`YYYY-MM`) a date falls in for a source with `$cutoff` (null behaves as 0, the calendar month):
+   * a month runs from its first day plus the cutoff to the day before the next one, so it is the month of the date minus
+   * the cutoff days. A date of the 15th with a cutoff of 15 still belongs to the month before.
+   */
+  public static function periodOf(?int $cutoff, mixed $date): string {
+    return Carbon::parse($date)->startOfDay()->subDays($cutoff ?? 0)->format("Y-m");
+  }
+
+  /**
+   * The first and the last billing months (`YYYY-MM`) of an expense, from the same rules as `billedIn()`: the effective date is
+   * `date`, or a month after when `next` is true (a month added without overflowing, like `date + interval '1 month'`), the
+   * first period is the one it falls in, and an instalment of N periods ends in the one that holds `effective + N - 1 months`.
+   * `last` is null for an expense without instalments.
+   */
+  public static function expensePeriods(?int $cutoff, mixed $date, bool $next, ?int $instalments): array {
+    $effective = Carbon::parse($date)->startOfDay();
+
+    if ($next) {
+      $effective = $effective->addMonthNoOverflow();
+    }
+
+    $last = $instalments ? self::periodOf($cutoff, $effective->copy()->addMonthsNoOverflow($instalments - 1)) : null;
+
+    return [self::periodOf($cutoff, $effective), $last];
+  }
+
+  /** The calendar month (`YYYY-MM`) a transfer counts in: the money moves that day, so the cutoff does not apply. */
+  public static function transferPeriod(mixed $date): string {
+    return Carbon::parse($date)->format("Y-m");
+  }
+
+  /**
    * What an instalment bills in a month: `$amount / $instalments` rounded to cents, halves away from zero.
    * It works on whole cents because dividing floats gives results like 1200.4649999 for an exact
    * 1200.465, and the SQL in `spentBySource()`, the web and the app must all round the same way.

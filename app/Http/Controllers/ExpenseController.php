@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Expense;
+use App\Models\Source;
+use App\Services\Summary;
 use App\Models\User;
 use Exception;
 use Illuminate\Http\Request;
@@ -28,7 +30,7 @@ class ExpenseController extends Controller
       return response()->json("error", 400);
     }
 
-    return $expense;
+    return $this->withPeriod($expense, $source);
   }
 
   public function update(Request $request, $expense_id) {
@@ -66,6 +68,21 @@ class ExpenseController extends Controller
       $expense->save();
     } catch (Exception $e) {
       return response()->json("error", 400);
+    }
+
+    return $this->withPeriod($expense, Source::find($expense->source_id));
+  }
+
+  /**
+   * The expense plus the billing month it falls in (`period`, `YYYY-MM`, by the cutoff of its source and `next`) and, for an
+   * instalment, the last one (`period_last`), so a client can show the month where it ended up.
+   */
+  private function withPeriod(Expense $expense, Source $source): Expense {
+    [$first, $last] = Summary::expensePeriods($source->cutoff, $expense->date, (bool) $expense->next, $expense->instalments);
+    $expense->setAttribute("period", $first);
+
+    if ($last !== null) {
+      $expense->setAttribute("period_last", $last);
     }
 
     return $expense;
