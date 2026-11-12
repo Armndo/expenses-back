@@ -270,6 +270,8 @@ class Summary
    *     when exceeded). All `null` without a budget and before the budget start month (the balance start
    *     unless the user sets another one); the carry and what is left also when a currency has no rate,
    *     because `spent` is then incomplete.
+   * - `last_month_owed`, `last_month_paid`: what the cards still owe from earlier periods, and what the ones that are paid owed at the
+   *   close of the previous month (see `lastMonth()`); `null` like `debt`.
    * - `missing_rates`: currencies in use without an exchange rate (their sources add nothing to `spent`
    *   and `income`).
    */
@@ -281,6 +283,8 @@ class Summary
       "debt" => null,
       "pending_instalments" => null,
       "total_money" => null,
+      "last_month_owed" => null,
+      "last_month_paid" => null,
       "budget" => Carbon::parse($start)->gte($this->budgetStart()) ? $this->budget() : null,
       "budget_carry" => null,
       "budget_left" => null,
@@ -297,9 +301,44 @@ class Summary
       $totals["cash"] = $this->toBase(array_diff_key($positions, array_flip($cards)));
       $totals["pending_instalments"] = $this->toBase($this->pendingBySource($start));
       $totals["total_money"] = round($totals["cash"] - $totals["debt"] - $totals["pending_instalments"], 2);
+      [$totals["last_month_owed"], $totals["last_month_paid"]] = $this->lastMonth($start, $cards);
     }
 
     return $totals;
+  }
+
+  /**
+   * What the cards owe from earlier periods, in pesos, as `[owed, paid]`. For each card, what it owed at the close of the previous
+   * month (`previous_balance`) less the payments (transfers that arrive) of the month starting at `$start`, never below 0 (a payment
+   * bigger than the debt goes to this month's charges): the cards that still owe something add that to `owed`, and the ones that are
+   * paid add what they owed at the close of the previous month to `paid`. It is the sum of what each card says in its chips
+   * (`Last month owed` and `Last month paid`), so the clients show the same figures per card and in total. A card in the balance start
+   * month has no previous month and adds nothing.
+   */
+  private function lastMonth(string $start, array $cards): array {
+    $previous = $this->positions(Carbon::parse($start)->subMonth()->format("Y-m-d"));
+
+    if ($previous === null) {
+      return [0.0, 0.0];
+    }
+
+    $in = $this->transfersIn($start, $start);
+    $out = $this->transfersOut($start, $start);
+    $owed = [];
+    $paid = [];
+
+    foreach ($cards as $id) {
+      $debt = max(0.0, -($previous[$id] ?? 0.0));
+      $left = max(0.0, -(($previous[$id] ?? 0.0) + (float) ($in[$id] ?? 0) - (float) ($out[$id] ?? 0)));
+
+      if ($left > 0.005) {
+        $owed[$id] = $left;
+      } elseif ($debt > 0.005) {
+        $paid[$id] = $debt;
+      }
+    }
+
+    return [$this->toBase($owed), $this->toBase($paid)];
   }
 
   /**
