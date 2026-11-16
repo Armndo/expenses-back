@@ -1,3 +1,9 @@
+## 0.14.0 (2026-11-16)
+
+### Feat
+
+- **expensecontroller**: cut a recurring expense from one of its charges
+
 ## 0.13.0 (2026-11-16)
 
 ### Feat
