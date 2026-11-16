@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\DB;
  *
  * - `q`: every word must be in the description, the category (name or alias), the source (and the other account of a transfer) or the
  *   amount, whatever the case or the accents.
- * - `type`: a comma separated list of `expenses` (without instalments), `instalments`, `incomes` and `transfers` (all by default).
+ * - `type`: a comma separated list of `expenses` (neither in instalments nor recurring), `instalments`, `recurring`, `incomes` and `transfers` (all by default).
  * - `category_id`: only expenses (incomes and transfers have no category).
  * - `min`, `max`: pesos, converted with the user's rates, only for expenses (instalments included), against the amount of the purchase;
  *   an expense in a currency with no rate cannot be compared and stays.
@@ -23,13 +23,14 @@ use Illuminate\Support\Facades\DB;
  *
  * Each row has `type` (`expense`, `income`, `transfer`), `id`, `date`, `description`, `amount`, `received_amount`, `currency`,
  * `category_id`, `category_name`, `category_alias`, `source_id`, `source_name` (the origin of a transfer) and `to_source_id`,
- * `to_source_name` (transfers), `instalments`, `monthly_share`, `next`, `period` (`YYYY-MM`, where it is first billed) and `period_last`.
+ * `to_source_name` (transfers), `instalments`, `monthly_share`, `next`, `recurs_every` and `ends_on` (a recurring expense: one row, its rule), `period`
+ * (`YYYY-MM`, where it is first billed) and `period_last`.
  */
 class SearchController extends Controller
 {
   const PER_PAGE = 50;
 
-  const TYPES = ["expenses", "instalments", "incomes", "transfers"];
+  const TYPES = ["expenses", "instalments", "recurring", "incomes", "transfers"];
 
   /** Lowercase text without the accents of Spanish, to compare with what is typed whatever the case or the accents. */
   const FOLD = "translate(lower(%s), 'áéíóúüñÁÉÍÓÚÜÑ', 'aeiouunaeiouun')";
@@ -137,6 +138,7 @@ class SearchController extends Controller
         null::numeric as received_amount, s.currency::text as currency, e.category_id::bigint as category_id, c.name::text as category_name,
         c.alias::text as category_alias, s.id::bigint as source_id, s.name::text as source_name, null::bigint as to_source_id,
         null::text as to_source_name, e.instalments::int as instalments, e.next as next,
+        e.recurs_every::int as recurs_every, e.ends_on as ends_on, s.cutoff::int as cutoff,
         {$month($effective, 's.cutoff')} as period,
         case when e.instalments is null then null else {$month("$effective + interval '1 month' * (e.instalments - 1)", 's.cutoff')} end as period_last,
         $pesos as pesos,
@@ -145,14 +147,14 @@ class SearchController extends Controller
       where s.user_id = ?";
 
     $incomes = "select 'income', i.id::bigint, i.date, i.description::text, i.amount::numeric, null::numeric, s.currency::text, null::bigint,
-        null::text, null::text, s.id::bigint, s.name::text, null::bigint, null::text, null::int, false,
+        null::text, null::text, s.id::bigint, s.name::text, null::bigint, null::text, null::int, false, null::int, null::date, null::int,
         {$month('i.date', 's.cutoff')}, null::text, null::numeric,
         {$text('i.description', 's.name', 'i.amount::text', "to_char(i.amount, 'FM999999990.00')")}
       from incomes i join sources s on s.id = i.source_id
       where s.user_id = ?";
 
     $transfers = "select 'transfer', t.id::bigint, t.date, t.description::text, t.amount::numeric, t.received_amount::numeric, f.currency::text, null::bigint,
-        null::text, null::text, f.id::bigint, f.name::text, d.id::bigint, d.name::text, null::int, false,
+        null::text, null::text, f.id::bigint, f.name::text, d.id::bigint, d.name::text, null::int, false, null::int, null::date, null::int,
         to_char(t.date, 'YYYY-MM'), null::text, null::numeric,
         {$text('t.description', 'f.name', 'd.name', 't.amount::text', "to_char(t.amount, 'FM999999990.00')")}
       from transfers t join sources f on f.id = t.from_source_id join sources d on d.id = t.to_source_id
@@ -167,7 +169,8 @@ class SearchController extends Controller
     $bindings = [];
 
     $kinds = [
-      "expenses" => "(type = 'expense' and instalments is null)",
+      "expenses" => "(type = 'expense' and instalments is null and recurs_every is null)",
+      "recurring" => "(type = 'expense' and recurs_every is not null)",
       "instalments" => "(type = 'expense' and instalments is not null)",
       "incomes" => "type = 'income'",
       "transfers" => "type = 'transfer'",
@@ -226,8 +229,13 @@ class SearchController extends Controller
       "instalments" => $row->instalments === null ? null : (int) $row->instalments,
       "monthly_share" => $row->instalments === null ? null : Summary::share($amount, (int) $row->instalments),
       "next" => (bool) $row->next,
+      "recurs_every" => $row->recurs_every === null ? null : (int) $row->recurs_every,
+      "ends_on" => $row->ends_on,
       "period" => $row->period,
-      "period_last" => $row->period_last,
+      // An instalment ends in its last period, and a recurring expense that ends has the period of its last charge (one that goes on has none).
+      "period_last" => $row->recurs_every !== null && $row->ends_on !== null
+        ? Summary::recurringLastPeriod($row->cutoff === null ? null : (int) $row->cutoff, $row->date, (bool) $row->next, (int) $row->recurs_every, $row->ends_on)
+        : $row->period_last,
     ];
   }
 

@@ -17,6 +17,8 @@ class Expense extends Model
     "date",
     "next",
     "instalments",
+    "recurs_every",
+    "ends_on",
     "category_id",
     "source_id",
   ];

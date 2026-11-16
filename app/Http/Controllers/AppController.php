@@ -63,7 +63,9 @@ class AppController extends Controller
     // whether a card carries debt from earlier periods.
     $previous = $summary->positions(Carbon::parse($start)->subMonth()->format("Y-m-d"));
 
-    $expenses = $sources->map(function ($source) use ($positions, $previous) {
+    $expenses = $sources->map(function ($source) use ($positions, $previous, $start) {
+      // A recurring expense comes in the month of each of its charges, with the date of that charge: the same row every month, like an instalment.
+      $source->expenses->each(fn($e) => $e->recurs_every === null ? null : $e->setAttribute("occurrence_date", Summary::recurringCharge($e, $source->cutoff, $start)));
       [$instalments, $regular] = $source->expenses->partition(fn($e) => !is_null($e->instalments));
       $transfers = $source->outgoingTransfers->map(fn($t) => $this->transferItem($t, "out"))
         ->concat($source->incomingTransfers->map(fn($t) => $this->transferItem($t, "in")))

@@ -240,7 +240,7 @@ describe("the month", function () {
 
     $expense = dataSource($this, "2026-10-01", $this->none->id)["expenses"][0];
 
-    expect(array_keys($expense))->toEqualCanonicalizing(["id", "amount", "description", "date", "next", "instalments", "category_id"]);
+    expect(array_keys($expense))->toEqualCanonicalizing(["id", "amount", "description", "date", "next", "instalments", "recurs_every", "ends_on", "category_id"]);
   });
 });
 

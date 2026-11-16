@@ -55,19 +55,34 @@ class Summary
   /**
    * Restricts an expenses query (already joined with `sources`) to the expenses billed in the period
    * starting at `$start`: regular ones by their effective date, instalments while any of their N
-   * periods overlaps it. The effective date is `date`, or `date + 1 month` when `next` is true.
+   * periods overlaps it, and recurring ones in the periods where one of their charges falls. The
+   * effective date is `date`, or `date + 1 month` when `next` is true.
+   *
+   * A recurring expense is one row (its rule and its first charge) that repeats every `recurs_every` months
+   * until `ends_on`: the charge number k has the date `date + k * recurs_every months` and falls in the
+   * period k * recurs_every months after the first one (the cutoff takes days off the date, so the clamping of
+   * a 31st to a shorter month does not move it to another period), so a period has a charge when its distance in
+   * months from the first period is a multiple of `recurs_every` and the charge is not after `ends_on`.
    */
   public static function billedIn($query, string $start) {
     [$periodStart, $periodEnd] = self::period($start);
     $effective = "case expenses.next when true then date(expenses.date + interval '1 month') else expenses.date end";
+    // Months from the period of the first charge to the one starting at `$start` (negative before it).
+    $first = "(($effective) - coalesce(sources.cutoff, 0))";
+    $distance = "((extract(year from '$start'::date) * 12 + extract(month from '$start'::date) - extract(year from $first) * 12 - extract(month from $first))::int)";
 
-    return $query->where(function ($q) use ($periodStart, $periodEnd, $effective) {
+    return $query->where(function ($q) use ($periodStart, $periodEnd, $effective, $distance) {
       $q->where(function ($q) use ($periodStart, $periodEnd, $effective) {
         $q->whereRaw("$effective between $periodStart and $periodEnd")
-        ->whereNull("expenses.instalments");
+        ->whereNull("expenses.instalments")
+        ->whereNull("expenses.recurs_every");
       })->orWhere(function ($q) use ($periodStart, $periodEnd, $effective) {
         $q->whereRaw("date($effective + interval '1 month' * (expenses.instalments - 1)) >= $periodStart and $effective <= $periodEnd")
         ->whereNotNull("expenses.instalments");
+      })->orWhere(function ($q) use ($distance) {
+        $q->whereNotNull("expenses.recurs_every")
+        ->whereRaw("$distance >= 0 and mod($distance, expenses.recurs_every::int) = 0")
+        ->whereRaw("(expenses.ends_on is null or expenses.date + ($distance * interval '1 month') <= expenses.ends_on)");
       });
     });
   }
@@ -85,9 +100,10 @@ class Summary
    * The first and the last billing months (`YYYY-MM`) of an expense, from the same rules as `billedIn()`: the effective date is
    * `date`, or a month after when `next` is true (a month added without overflowing, like `date + interval '1 month'`), the
    * first period is the one it falls in, and an instalment of N periods ends in the one that holds `effective + N - 1 months`.
-   * `last` is null for an expense without instalments.
+   * `last` is null for an expense without instalments, and for a recurring one it is the period of its last charge when it has an
+   * `$endsOn` (null while it goes on).
    */
-  public static function expensePeriods(?int $cutoff, mixed $date, bool $next, ?int $instalments): array {
+  public static function expensePeriods(?int $cutoff, mixed $date, bool $next, ?int $instalments, ?int $recursEvery = null, ?string $endsOn = null): array {
     $effective = Carbon::parse($date)->startOfDay();
 
     if ($next) {
@@ -96,7 +112,58 @@ class Summary
 
     $last = $instalments ? self::periodOf($cutoff, $effective->copy()->addMonthsNoOverflow($instalments - 1)) : null;
 
+    if ($recursEvery && $endsOn) {
+      $last = self::recurringLastPeriod($cutoff, $date, $next, $recursEvery, $endsOn);
+    }
+
     return [self::periodOf($cutoff, $effective), $last];
+  }
+
+  /**
+   * The billing month (`YYYY-MM`) of the last charge of a recurring expense that ends on `$endsOn`: the last
+   * `date + k * recurs_every months` that is not after it, or null when there is none.
+   */
+  public static function recurringLastPeriod(?int $cutoff, mixed $date, bool $next, int $recursEvery, string $endsOn): ?string {
+    $first = Carbon::parse($date)->startOfDay();
+    $end = Carbon::parse($endsOn)->startOfDay();
+    $months = ($end->year - $first->year) * 12 + $end->month - $first->month;
+
+    if ($first->copy()->addMonthsNoOverflow($months)->gt($end)) {
+      $months--;
+    }
+
+    if ($months < 0) {
+      return null;
+    }
+
+    $charge = $first->copy()->addMonthsNoOverflow(intdiv($months, $recursEvery) * $recursEvery);
+
+    return self::periodOf($cutoff, $next ? $charge->addMonthNoOverflow() : $charge);
+  }
+
+  /** First day of the billing month of the first charge of a recurring expense. */
+  private static function recurringFirstPeriod(?int $cutoff, mixed $date, bool $next): Carbon {
+    $effective = Carbon::parse($date)->startOfDay();
+
+    return Carbon::parse(self::periodOf($cutoff, $next ? $effective->addMonthNoOverflow() : $effective) . "-01");
+  }
+
+  /**
+   * The date of the charge of a recurring expense in the billing month starting at `$start`, or null when it has none there. The
+   * same rule as `billedIn()`, in PHP, for the items of `/data` and the range.
+   */
+  public static function recurringCharge(Expense $expense, ?int $cutoff, string $start): ?string {
+    $first = self::recurringFirstPeriod($cutoff, $expense->date, (bool) $expense->next);
+    $month = Carbon::parse($start)->startOfMonth();
+    $distance = ($month->year - $first->year) * 12 + $month->month - $first->month;
+
+    if ($distance < 0 || $distance % $expense->recurs_every !== 0) {
+      return null;
+    }
+
+    $charge = Carbon::parse($expense->date)->addMonthsNoOverflow($distance);
+
+    return $expense->ends_on !== null && $charge->gt(Carbon::parse($expense->ends_on)) ? null : $charge->toDateString();
   }
 
   /** The calendar month (`YYYY-MM`) a transfer counts in: the money moves that day, so the cutoff does not apply. */
@@ -349,6 +416,50 @@ class Summary
    * month. Months are those of the billing periods of each source, like `billedIn()`. With no expenses it is the
    * current month for both.
    */
+  /**
+   * How far the recurring expenses that still go on reach, for the range: six months ahead of the current one, so a month with
+   * an instalment that is still far away shows them, and the period of the next charge of each one (a yearly one reaches its next
+   * year). They never stretch it further by themselves, and one that already ended only reaches its last charge.
+   *
+   * @return array<int, Carbon>
+   */
+  private function recurringReach(Carbon $now): array {
+    $reach = [];
+
+    $rules = Expense::query()
+    ->join("sources", "sources.id", "expenses.source_id")
+    ->where("sources.user_id", $this->user->id)
+    ->whereNotNull("expenses.recurs_every")
+    ->select("expenses.*", "sources.cutoff as source_cutoff")
+    ->get();
+
+    foreach ($rules as $rule) {
+      $cutoff = $rule->source_cutoff;
+
+      if ($rule->ends_on !== null) {
+        $ended = self::recurringLastPeriod($cutoff, $rule->date, (bool) $rule->next, $rule->recurs_every, $rule->ends_on);
+        $reach[] = $ended ? Carbon::parse("$ended-01") : null;
+
+        if (Carbon::parse($rule->ends_on)->lt($now)) {
+          continue;
+        }
+      }
+
+      $reach[] = $now->copy()->addMonths(6);
+
+      // The next charge from this month on.
+      $first = self::recurringFirstPeriod($cutoff, $rule->date, (bool) $rule->next);
+      $distance = max(0, ($now->year - $first->year) * 12 + $now->month - $first->month);
+      $next = $first->copy()->addMonths((int) (ceil($distance / $rule->recurs_every) * $rule->recurs_every));
+
+      if (self::recurringCharge($rule, $cutoff, $next->format("Y-m-d")) !== null) {
+        $reach[] = $next;
+      }
+    }
+
+    return array_values(array_filter($reach));
+  }
+
   public function range(): array {
     $effective = "case expenses.next when true then date(expenses.date + interval '1 month') else expenses.date end";
     $label = "date_trunc('month', ($effective) - coalesce(sources.cutoff, 0) * interval '1 day')";
@@ -368,7 +479,7 @@ class Summary
     ]);
 
     $first = collect($firsts)->push($now)->min();
-    $last = collect([$row?->last ? Carbon::parse($row->last)->startOfMonth() : null, $now])->filter()->max();
+    $last = collect([$row?->last ? Carbon::parse($row->last)->startOfMonth() : null, $now, ...$this->recurringReach($now)])->filter()->max();
 
     return ["first" => $first->format("Y-m-d"), "last" => $last->format("Y-m-d")];
   }
@@ -438,10 +549,10 @@ class Summary
   }
 
   /**
-   * What the user spends in a month on top of the instalments: the median of the last 3 months that are over (the current
-   * one is not), each one as its spent minus the monthly share of the instalments, in pesos. The instalments are not part
-   * of it because the projection already has them month by month, and the median because one month with a one-off
-   * purchase must not move it.
+   * What the user spends in a month on top of the instalments and the recurring expenses: the median of the last 3 months that
+   * are over (the current one is not), each one as its spent minus the monthly share of the instalments and the charges of the
+   * recurring expenses, in pesos. Those are not part of it because the projection already has them month by month (adding them
+   * again would count them twice), and the median because one month with a one-off purchase must not move it.
    * - With months the budget was active in (from its start on) only those count, with the net spent: it is what the
    *   budget really took, and what came before it (an opening balance, a salary) was not meant to give anything back.
    * - Without any yet (the budget started this month, or has not started) it falls back on the last months over that
@@ -469,7 +580,7 @@ class Summary
       $key = $m->format("Y-m-d");
       $spent = $active ? $this->netSpent($key) : $this->toBase($this->spentBySource($key));
 
-      return $spent - $this->toBase($this->instalmentsBilledBySource($key));
+      return $spent - $this->toBase($this->instalmentsBilledBySource($key)) - $this->toBase($this->recurringBilledBySource($key));
     }, array_values($months));
 
     if (!$paces) {
@@ -480,6 +591,19 @@ class Summary
     $middle = intdiv(count($paces), 2);
 
     return round(count($paces) % 2 ? $paces[$middle] : ($paces[$middle - 1] + $paces[$middle]) / 2, 2);
+  }
+
+  /** What the recurring expenses bill in the period starting at `$start` (id => amount in the source's currency). */
+  private function recurringBilledBySource(string $start): array {
+    $query = Expense::query()
+    ->join("sources", "sources.id", "expenses.source_id")
+    ->where("sources.user_id", $this->user->id)
+    ->whereNotNull("expenses.recurs_every");
+
+    return self::billedIn($query, $start)
+    ->selectRaw("expenses.source_id as source_id, coalesce(sum(expenses.amount::numeric), 0) as total")
+    ->groupBy("expenses.source_id")
+    ->pluck("total", "source_id")->all();
   }
 
   /** What the instalments bill in the period starting at `$start` (id => rounded shares in the source's currency). */

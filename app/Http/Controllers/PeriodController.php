@@ -8,8 +8,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 /**
- * `GET /period?source_id=&date=&next=&instalments=`: the billing month an expense or an income would fall in, and for an
- * instalment the last one, without saving anything. It is only informative (the forms show "Bills in ..."), so a client must not
+ * `GET /period?source_id=&date=&next=&instalments=&recurs_every=&ends_on=`: the billing month an expense or an income would fall in, and for an
+ * instalment (or a recurring expense that ends) the last one, without saving anything. It is only informative (the forms show "Bills in ..."), so a client must not
  * depend on it: it answers `{ "period": "2026-12", "last": null }`, or `400 "error"` when something is not valid, like the rest.
  */
 class PeriodController extends Controller
@@ -31,7 +31,22 @@ class PeriodController extends Controller
     }
 
     $count = $instalments === null || $instalments === "" ? null : (int) $instalments;
-    [$first, $last] = Summary::expensePeriods($source->cutoff, $date, $next, $count);
+
+    // A recurring expense: every 1 to 60 months, never with instalments, and `ends_on` a real date not before `date`.
+    $every = $request->query("recurs_every");
+    $endsOn = $request->query("ends_on");
+    $every = $every === "" ? null : $every;
+    $endsOn = $endsOn === "" ? null : $endsOn;
+
+    if ($every !== null && (!is_scalar($every) || filter_var($every, FILTER_VALIDATE_INT) === false || (int) $every < 1 || (int) $every > 60 || $count !== null)) {
+      return response()->json("error", 400);
+    }
+
+    if ($endsOn !== null && ($every === null || !$this->validDate($endsOn) || $endsOn < $date)) {
+      return response()->json("error", 400);
+    }
+
+    [$first, $last] = Summary::expensePeriods($source->cutoff, $date, $next, $count, $every === null ? null : (int) $every, $endsOn);
 
     return ["period" => $first, "last" => $last];
   }

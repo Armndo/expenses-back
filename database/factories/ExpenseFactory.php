@@ -34,6 +34,12 @@ class ExpenseFactory extends Factory
         return $this->state(fn () => ['instalments' => $count]);
     }
 
+    /** A recurring expense: it repeats every `$months` months (1 monthly, 12 yearly) until `$endsOn`, or for good. */
+    public function recurring(int $months = 1, ?string $endsOn = null): static
+    {
+        return $this->state(fn () => ['recurs_every' => $months, 'ends_on' => $endsOn]);
+    }
+
     public function on(string $date): static
     {
         return $this->state(fn () => ['date' => $date]);
