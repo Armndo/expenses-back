@@ -7,6 +7,7 @@ use App\Http\Controllers\HistoryController;
 use App\Http\Controllers\IncomeController;
 use App\Http\Controllers\PeriodController;
 use App\Http\Controllers\RateController;
+use App\Http\Controllers\SearchController;
 use App\Http\Controllers\SettingController;
 use App\Http\Controllers\SourceController;
 use App\Http\Controllers\TransferController;
@@ -24,6 +25,7 @@ Route::middleware("auth:api")->group(function() {
   Route::get("data", AppController::class);
   Route::get("history", HistoryController::class);
   Route::get("period", PeriodController::class);
+  Route::get("search", SearchController::class);
 
   Route::controller(ExpenseController::class)->group(function() {
     Route::post("expenses", "store");

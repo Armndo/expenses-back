@@ -17,6 +17,7 @@ it("requires a token on every route but /login", function (string $method, strin
   ["GET", "/data"],
   ["GET", "/history"],
   ["GET", "/period"],
+  ["GET", "/search"],
   ["POST", "/expenses"],
   ["PUT", "/expenses/1"],
   ["DELETE", "/expenses/1"],
