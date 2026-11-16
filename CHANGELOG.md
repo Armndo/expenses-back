@@ -1,3 +1,10 @@
+## 0.13.0 (2026-11-16)
+
+### Feat
+
+- **recurring**: add what the recurring expenses bill to the summary
+- **recurring**: add recurring expenses as a rule that repeats every N months
+
 ## 0.12.0 (2026-11-16)
 
 ### Feat
