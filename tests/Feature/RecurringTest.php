@@ -191,6 +191,45 @@ describe("the money", function () {
   });
 });
 
+describe("the recurring part of the summary", function () {
+  it("is what the recurring expenses bill this month, in pesos, inside what is spent", function () {
+    Expense::factory()->for($this->calendar)->recurring()->on("2026-10-10")->create(["amount" => 100]);
+    Expense::factory()->for($this->calendar)->on("2026-11-12")->create(["amount" => 40]);
+
+    $summary = $this->getJson("/data?date=2026-11-01")->assertOk()->json("summary");
+
+    expect($summary["recurring"])->toBe(100)->and($summary["spent"])->toBe(140);
+  });
+
+  it("is 0 where there is no charge, and in a month before the first one", function () {
+    Expense::factory()->for($this->calendar)->recurring(3)->on("2026-10-10")->create(["amount" => 100]);
+
+    foreach (["2026-09" => 0, "2026-10" => 100, "2026-11" => 0, "2026-12" => 0, "2027-01" => 100] as $month => $recurring) {
+      expect($this->getJson("/data?date=$month-01")->json("summary.recurring"))->toEqual($recurring, $month);
+    }
+  });
+
+  it("converts a source in dollars with its rate, and adds nothing while a currency has no rate", function () {
+    $dollars = Source::factory()->for($this->user)->create(["currency" => "USD"]);
+    Expense::factory()->for($dollars)->recurring()->on("2026-10-10")->create(["amount" => 10]);
+
+    expect($this->getJson("/data?date=2026-11-01")->json("summary.recurring"))->toBe(0);
+
+    \App\Models\ExchangeRate::create(["user_id" => $this->user->id, "currency" => "USD", "rate" => 20]);
+
+    expect($this->getJson("/data?date=2026-11-01")->json("summary.recurring"))->toBe(200);
+  });
+
+  it("is in every month of /history, the ones to come included", function () {
+    Expense::factory()->for($this->calendar)->recurring(1, "2027-01-10")->on("2026-10-10")->create(["amount" => 100]);
+
+    $months = collect($this->getJson("/history")->assertOk()->json("months"))->keyBy(fn($m) => substr($m["month"], 0, 7));
+
+    expect([$months["2026-11"]["recurring"], $months["2026-12"]["recurring"], $months["2027-01"]["recurring"]])->toBe([100, 100, 100]);
+    expect($months->has("2027-02") ? $months["2027-02"]["recurring"] : 0)->toBe(0);
+  });
+});
+
 describe("the range", function () {
   it("does not change without recurring expenses", function () {
     expect($this->getJson("/data?date=2026-11-01")->json("range.last"))->toBe("2026-11-01");

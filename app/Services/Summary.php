@@ -29,6 +29,9 @@ class Summary
   /** @var array<string, array<int, float>> month start => spent by source, so each month is queried once */
   private array $spent = [];
 
+  /** @var array<string, array<int, float>> month start => what the recurring expenses bill by source, so each month is queried once */
+  private array $recurringBilled = [];
+
   /** @var array<string, array<int, float>> month start => budget incomes by source, so each month is queried once */
   private array $budgetIncomes = [];
 
@@ -345,6 +348,8 @@ class Summary
   public function totals(string $start): array {
     $totals = [
       "spent" => $this->toBase($this->spentBySource($start)),
+      // What the recurring expenses bill this month: already part of `spent`, which it breaks down like the instalments.
+      "recurring" => $this->toBase($this->recurringBilledBySource($start)),
       "income" => $this->toBase($this->incomeBySource($start, $start)),
       "cash" => null,
       "debt" => null,
@@ -595,12 +600,16 @@ class Summary
 
   /** What the recurring expenses bill in the period starting at `$start` (id => amount in the source's currency). */
   private function recurringBilledBySource(string $start): array {
+    if (array_key_exists($start, $this->recurringBilled)) {
+      return $this->recurringBilled[$start];
+    }
+
     $query = Expense::query()
     ->join("sources", "sources.id", "expenses.source_id")
     ->where("sources.user_id", $this->user->id)
     ->whereNotNull("expenses.recurs_every");
 
-    return self::billedIn($query, $start)
+    return $this->recurringBilled[$start] = self::billedIn($query, $start)
     ->selectRaw("expenses.source_id as source_id, coalesce(sum(expenses.amount::numeric), 0) as total")
     ->groupBy("expenses.source_id")
     ->pluck("total", "source_id")->all();

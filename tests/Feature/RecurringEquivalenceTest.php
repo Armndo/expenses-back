@@ -99,7 +99,8 @@ function recurringMoney(array $data): array {
 
   $categories = collect($data["categories"])->mapWithKeys(fn($c) => [$c["name"] => [$c["expenses_count"], $c["expenses_sum_amount"]]])->all();
 
-  return ["summary" => $data["summary"], "sources" => $sources, "categories" => $categories];
+  // `recurring` breaks `spent` down by what is a rule, so it is the one number that differs by hand (it is zero there): everything else is the same.
+  return ["summary" => collect($data["summary"])->except("recurring")->all(), "sources" => $sources, "categories" => $categories];
 }
 
 beforeEach(function () {
