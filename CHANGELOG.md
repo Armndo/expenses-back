@@ -1,3 +1,11 @@
+## 0.12.0 (2026-11-16)
+
+### Feat
+
+- **search**: search the records of all the months
+- **summary**: add last_month_owed and last_month_paid
+- **period**: answer the billing month of a record and add GET /period
+
 ## 0.11.0 (2026-11-09)
 
 ### Feat
